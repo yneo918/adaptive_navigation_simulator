@@ -1,0 +1,26 @@
+# Core numerical and data tooling
+numpy
+sympy
+pandas
+matplotlib
+
+# GUI and visualization
+PyQt6
+
+# Robotics and hardware integration
+pyserial
+psutil
+PyYAML
+pyproj
+# digi-xbee
+# Adafruit-Blinka
+# adafruit-circuitpython-bno055
+# adafruit-circuitpython-gps
+numpy-stl
+
+# Testing
+pytest
+
+# ROS 2 Python packages (install via apt, not pip)
+# rclpy
+# rosidl-runtime-py

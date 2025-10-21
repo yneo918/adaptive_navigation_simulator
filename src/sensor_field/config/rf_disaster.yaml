@@ -1,0 +1,10 @@
+csv_sensor_field:
+  ros__parameters:
+    csv_path: data/radiation_field.csv
+    frame_id: world
+    interpret_latlon: true
+    distance_unit: m
+    column_x: latitude
+    column_y: longitude
+    column_data: radiation
+    distance_scale: 0.002
