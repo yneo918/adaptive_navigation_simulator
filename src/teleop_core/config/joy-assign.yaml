@@ -1,0 +1,17 @@
+joy_cmd:
+  ros__parameters:
+    # Movement controls
+    ly: "LY"          # Forward/backward velocity
+    lx: "LX"          # Left/right velocity (for holonomic drive)
+    az: "RX"          # Angular velocity
+    
+    # Control buttons
+    en: "LB"                    # Enable movement
+    rover_sel: "Y"              # Select rover
+    mode_sel: "X"               # Switch operation mode
+    angle_sel: "A"              # Select angle
+    hardware_sim_sel: "B"       # Hardware/simulation toggle
+    broadcast: "RB"             # Broadcast mode
+    
+    # Rover configuration
+    n_rover: 5

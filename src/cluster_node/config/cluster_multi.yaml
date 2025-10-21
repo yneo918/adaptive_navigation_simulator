@@ -1,0 +1,6 @@
+cluster_controller:
+  ros__parameters:
+    robot_id_list: ["p1", "p2", "p3", "p4", "p5"] #list of possible robots to choose from
+    cluster_size: 3 #number of robots to use
+    cluster_type: "TriangleatCentroid"
+    cluster_params: [ 10.0, 10.0 , 1.04976]

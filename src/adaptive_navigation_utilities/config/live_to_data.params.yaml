@@ -1,0 +1,7 @@
+# config/live_data_to_csv.params.yaml
+live_data_to_csv:
+	ros__parameters:
+	  record_all_topics: True
+    timeout: 60.0
+    period: 0.05
+    
