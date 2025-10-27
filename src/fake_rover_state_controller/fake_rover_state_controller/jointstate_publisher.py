@@ -30,18 +30,15 @@ class JointStatePublisher(Node):
         self.robot_id = self.get_parameter('robot_id').value
 
         self.position = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
-        self.position_hw = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
         self.position_desired = {'x': 0.0, 'y': 0.0, 'theta': 0.0}
         self.joint_names = ['w_to_x', 'x_to_y', 'y_to_t']
 
         # Subscribe to pose data from different sources
-        self.pubsub.create_subscription(Pose2D, f'/sim/{self.robot_id}/pose2D', self.sim_pose_callback, 10)
-        self.pubsub.create_subscription(Pose2D, f'/{self.robot_id}/pose2D', self.hw_pose_callback, 10)
+        self.pubsub.create_subscription(Pose2D, f'/{self.robot_id}/pose2D', self.pose_callback, 10)
         self.pubsub.create_subscription(Pose2D, f'/{self.robot_id}/desiredPose2D', self.desired_pose_callback, 10)
         
         # Publish joint states for visualization
         self.pubsub.create_publisher(JointState, f'/{self.robot_id}/joint_states', 10)
-        self.pubsub.create_publisher(JointState, f'/{self.robot_id}hw/joint_states', 10)
         self.pubsub.create_publisher(JointState, f'/{self.robot_id}desired/joint_states', 10)
         
         timer_period = UPDATE_RATE
@@ -60,23 +57,15 @@ class JointStatePublisher(Node):
         ]
         self.pubsub.publish(f'/{self.robot_id}/joint_states', jointstates_msg)
 
-        # Publish hardware joint states
-        jointstates_msg.position = [
-            self.position_hw['x'], self.position_hw['y'], -self.position_hw['theta']
-        ]
-        self.pubsub.publish(f'/{self.robot_id}hw/joint_states', jointstates_msg)
-
         # Publish desired joint states
         jointstates_msg.position = [
             self.position_desired['x'], self.position_desired['y'], self.position_desired['theta']
         ]
         self.pubsub.publish(f'/{self.robot_id}desired/joint_states', jointstates_msg)
 
-    def sim_pose_callback(self, msg):
+    def pose_callback(self, msg):
         self.position.update({'x': msg.x, 'y': msg.y, 'theta': msg.theta})
 
-    def hw_pose_callback(self, msg):
-        self.position_hw.update({'x': msg.x, 'y': msg.y, 'theta': msg.theta})
 
     def desired_pose_callback(self, msg):
         self.position_desired.update({'x': msg.x, 'y': msg.y, 'theta': msg.theta})

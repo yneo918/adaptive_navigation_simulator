@@ -179,7 +179,7 @@ class CsvSensorFieldPublisher(Node):
             avg_lat = 0.5 * (lat_rad + lat0)
             delta_lat = lat_rad - lat0
             delta_lon = lon_rad - lon0
-            north = EARTH_RADIUS_M * delta_lat * scale
+            north = - EARTH_RADIUS_M * delta_lat * scale
             east = EARTH_RADIUS_M * np.cos(avg_lat) * delta_lon * scale
             converted_xy = np.column_stack((north, east))
             if dimension == 2:
@@ -206,7 +206,7 @@ class CsvSensorFieldPublisher(Node):
         intensity = self.values.astype(np.float32)
         buffer = bytearray(point_step * len(padded_points))
         for index, (x, y, z) in enumerate(padded_points):
-            struct.pack_into('ffff', buffer, index * point_step, float(x), float(y), float(z), intensity[index])
+            struct.pack_into('ffff', buffer, index * point_step, float(x), float(y), intensity[index], intensity[index])
 
         msg = PointCloud2()
         msg.header.stamp = header

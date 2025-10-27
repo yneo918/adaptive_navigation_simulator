@@ -15,8 +15,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(pioneer_launch_file),
             launch_arguments={
                 'robot_id': 'p1',
-                'x': '40.0', 
-                'y': '10.0',
+                'x': '-30.0', 
+                'y': '-10.0',
                 't': '1.57',
                 'desired': 'desired',
                 'a': '0.2'
@@ -26,8 +26,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(pioneer_launch_file),
             launch_arguments={
                 'robot_id': 'p2',
-                'x': '40.0', 
-                'y': '13.0',
+                'x': '-30.0', 
+                'y': '-7.0',
                 't': '1.57',
                 'desired': 'desired',
                 'a': '0.2'
@@ -37,8 +37,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(pioneer_launch_file),
             launch_arguments={
                 'robot_id': 'p3',
-                'x': '40.0', 
-                'y': '7.0', 
+                'x': '-30.0', 
+                'y': '-13.0', 
                 't': '1.57',
                 'desired': 'desired',
                 'a': '0.2'
@@ -48,8 +48,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(pioneer_launch_file),
             launch_arguments={
                 'robot_id': 'p4',
-                'x': '40.0', 
-                'y': '16.0',
+                'x': '-30.0', 
+                'y': '-4.0',
                 't': '1.57',
                 'desired': 'desired',
                 'a': '0.2'
@@ -59,8 +59,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(pioneer_launch_file),
             launch_arguments={
                 'robot_id': 'p5',
-                'x': '40.0', 
-                'y': '4.0',
+                'x': '-30.0', 
+                'y': '-16.0',
                 't': '1.57',
                 'desired': 'desired',
                 'a': '0.2'

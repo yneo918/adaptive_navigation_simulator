@@ -60,8 +60,8 @@ def generate_launch_description():
         ),
         Node(
             package='sensor_field',
-            executable='topography_2d',
-            name='sample_2d',
+            executable='csv_sensor_field',
+            name='csv_sensor_field',
             parameters=[sim_field_params],
         ),
         Node(

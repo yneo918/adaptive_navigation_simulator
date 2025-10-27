@@ -60,7 +60,7 @@ def launch_setup(context, *args, **kwargs):
                 'x': x,
                 'y': y,
                 't': t,
-                'prefix': '/sim'
+                'prefix': ''
             }]
         ),
         Node(
@@ -70,7 +70,7 @@ def launch_setup(context, *args, **kwargs):
             output='screen',
             parameters=[{
                 'robot_id': robot_id,
-                'prefix': '/sim',
+                'prefix': '',
                 'sensor_msg_name': 'sensor',
                 'sensor_service_name': 'get_sensor'
             }]
@@ -85,33 +85,6 @@ def launch_setup(context, *args, **kwargs):
             }]
         ),
     ]
-    if hw == 'hw':
-        main_nodes.append(
-            Node(
-                package="robot_state_publisher",
-                executable="robot_state_publisher",
-                name="state_publisher",
-                namespace=f"{robot_id}hw",
-                output="screen",
-                parameters=[{
-                    "robot_description": Command([
-                        "xacro ", 
-                        xacro_file, 
-                        f" r:={COLORS[robot_id][0]} g:={COLORS[robot_id][1]} b:={COLORS[robot_id][2]} a:=",
-                        LaunchConfiguration("hwa")                    
-                    ]),
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
-                    "frame_prefix": f"{robot_id}hw/",
-                }]
-            )
-        )
-        main_nodes.append(
-            Node(
-                package="tf2_ros",
-                executable="static_transform_publisher",
-                arguments=["0", "0", "0", "0", "0", "0", "world", f"{robot_id}hw/world"],
-            ),
-        )
     if desired == 'desired':
         main_nodes.append(
             Node(

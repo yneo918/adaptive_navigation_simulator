@@ -8,7 +8,7 @@ from std_msgs.msg import String, Float32MultiArray, Bool, Int16
 from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import Twist, Pose2D
 from pioneer_interfaces.msg import ClusterInfo
-from teleop_core.my_ros_module import PubSubManager
+from gui_package.my_ros_module import PubSubManager
 from cluster_node.Cluster import Cluster, ClusterConfig, ControlMode
 
 # Constants
@@ -64,6 +64,7 @@ class Controller(Node):
                 ('control_mode', "POS"),
             ]
         )
+        self.prefix = ''
         
         # Log all parameters
         for name, param in self._parameters.items():
@@ -102,24 +103,18 @@ class Controller(Node):
         self.n_rover = len(robot_id_list)
         
         # Initialize status dictionaries
-        self.actual_robot_status: Dict[str, RobotStatus] = {}
-        self.sim_robot_status: Dict[str, RobotStatus] = {}
+        self.robot_status: Dict[str, RobotStatus] = {}
         
         for robot_id in self.robot_id_list:
-            self.actual_robot_status[robot_id] = RobotStatus()
-            self.sim_robot_status[robot_id] = RobotStatus()
+            self.robot_status[robot_id] = RobotStatus()
         
         self.get_logger().info(f"ROVER: {self.robot_id_list} N: {self.n_rover}")
 
     def _initialize_cluster_data(self):
-        """Initialize cluster-related data structures"""        
-        # Configuration flags
-        self.actual_configured = False
-        self.sim_configured = False
+        """Initialize cluster-related data structures"""
         
         # Robot lists
         self.registered_robots: List[str] = []
-        self.sim_registered_robots: List[str] = []
         
         # Actual robot cluster data
         self._initialize_cluster_arrays()
@@ -137,12 +132,13 @@ class Controller(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to create cluster: {e}")
         
+        self._assign_robots()
+        
         # Control state
-        self.output = "actual"  # Switch between simulation and actual robots
         self.mode = "INIT"  # Control mode
         self.cluster_enable = False
         self.enable = False
-        self.joy_timestamp: Optional[float] = None
+        self.ctrl_timestamp: Optional[float] = None
         
         self.get_logger().info(f"Cluster initialized with size: {self.cluster_size}")
 
@@ -159,12 +155,6 @@ class Controller(Node):
         self.r = np.zeros(array_size)
         self.rdot = np.zeros(array_size)
         
-        # Simulation arrays
-        self.sim_c = np.zeros(array_size)
-        self.sim_cdot_des = np.zeros(array_size)
-        self.sim_r = np.zeros(array_size)
-        self.sim_rdot = np.zeros(array_size)
-        
         # Set initial desired positions
         param_start = self.cluster_size * ROVER_DOF - len(self.cluster_params)
         param_end = self.cluster_size * ROVER_DOF
@@ -173,7 +163,6 @@ class Controller(Node):
         )
         
         self.time = None
-        self.sim_time = None
 
     def _setup_communication(self):
         """Setup ROS publishers and subscribers"""
@@ -193,12 +182,11 @@ class Controller(Node):
     def _create_global_subscriptions(self):
         """Create global topic subscriptions"""
         subscriptions = [
-            (Bool, '/joy/hardware', self._hw_sim_callback, 1),
-            (String, '/modeC', self._mode_callback, 1),
+            (String, '/ctrl/cluster_mode', self._mode_callback, 1),
             (Twist, '/ctrl/cmd_vel', self._cmd_callback, 5),
-            (Bool, '/joy/enable', self._enable_callback, 5),
-            (Float32MultiArray, '/cluster_params', self._cluster_params_callback, 5),
-            (Float32MultiArray, '/cluster_desired', self._cluster_desired_callback, 5),
+            (Bool, '/ctrl/enable', self._enable_callback, 5),
+            (Float32MultiArray, '/ctrl/cluster_params', self._cluster_params_callback, 5),
+            (Float32MultiArray, '/ctrl/cluster_desired', self._cluster_desired_callback, 5),
         ]
         
         for msg_type, topic, callback, qos in subscriptions:
@@ -207,8 +195,7 @@ class Controller(Node):
     def _create_global_publishers(self):
         """Create global topic publishers"""
         publishers = [
-            (ClusterInfo, '/cluster_info', 5),
-            (ClusterInfo, '/sim/cluster_info', 5),
+            (ClusterInfo, '/ctrl/cluster_info', 5),
         ]
         
         for msg_type, topic, qos in publishers:
@@ -220,18 +207,13 @@ class Controller(Node):
             # Subscriptions
             self.pubsub.create_subscription(
                 Pose2D, f'/{robot_id}/pose2D',
-                lambda msg, rid=robot_id: self._robot_pose_callback(msg, rid, "actual"), 5
-            )
-            self.pubsub.create_subscription(
-                Pose2D, f'/sim/{robot_id}/pose2D',
-                lambda msg, rid=robot_id: self._robot_pose_callback(msg, rid, "sim"), 5
+                lambda msg, rid=robot_id: self._robot_pose_callback(msg, rid), 5
             )
             
             # Publishers
             topics = [
                 (Pose2D, f'/{robot_id}/desiredPose2D', 5),
                 (Twist, f'/{robot_id}/cmd_vel', 5),
-                (Twist, f'/sim/{robot_id}/cmd_vel', 5),
             ]
             
             for msg_type, topic, qos in topics:
@@ -250,26 +232,17 @@ class Controller(Node):
         if self.mode in ["JOY_M", "NEU_M"]:
             self.cluster_enable = False
 
-    def _hw_sim_callback(self, msg: Bool):
-        """Switch between hardware and simulation output"""
-        previous_output = self.output
-        self.output = "actual" if msg.data else "sim"
-        
-        if previous_output != self.output:
-            self.get_logger().info(f"Changed output to {self.output}")
-
     def _enable_callback(self, msg: Bool):
         """Handle enable/disable commands"""
         self.enable = msg.data
 
-    def _robot_pose_callback(self, msg: Pose2D, robot_id: str, output: str):
+    def _robot_pose_callback(self, msg: Pose2D, robot_id: str):
         """Process robot pose updates"""
         try:
             new_pose = [float(msg.x), float(msg.y), float(msg.theta)]
             
             # Get appropriate status dictionary
-            status_dict = (self.actual_robot_status if output == "actual" 
-                        else self.sim_robot_status)
+            status_dict = self.robot_status
             robot_status = status_dict[robot_id]
             
             # Calculate velocity if previous pose exists
@@ -287,7 +260,7 @@ class Controller(Node):
             robot_status.update_pose(new_pose, new_velocity, time.time())
             
             self.get_logger().debug(
-                f"Robot {output}/{robot_id} pose: {new_pose}, vel: {new_velocity}"
+                f"Robot {robot_id} pose: {new_pose}, vel: {new_velocity}"
             )
             
         except Exception as e:
@@ -299,9 +272,9 @@ class Controller(Node):
         """Process joystick commands for cluster navigation"""
         # Calculate command frequency
         current_time = time.time()
-        freq = (1.0 / (current_time - self.joy_timestamp) 
-                if self.joy_timestamp is not None else JOY_FREQ)
-        self.joy_timestamp = current_time
+        freq = (1.0 / (current_time - self.ctrl_timestamp) 
+                if self.ctrl_timestamp is not None else JOY_FREQ)
+        self.ctrl_timestamp = current_time
 
         if self.mode == "NAV_M" or self.mode == "ADPTV_NAV_M": #only update cluster if in navigation mode
             try:
@@ -321,20 +294,13 @@ class Controller(Node):
                     x = msg.linear.x
                     y = msg.linear.y
                     t = msg.angular.z
-                    if self.output == "actual":
-                        ct = math.cos(self.c[2])
-                        st = math.sin(self.c[2])
-                        self.cdot_des[0, 0] = x*ct - y*st
-                        self.cdot_des[1, 0] = x*st + y*ct
-                        self.cdot_des[2, 0] = self._wrap_to_pi(msg.angular.z * 0.3)
-                    elif self.output == "sim":
-                        ct = math.cos(self.sim_c[2])
-                        st = math.sin(self.sim_c[2])
-                        self.sim_cdot_des[0, 0] = x*ct - y*st
-                        self.sim_cdot_des[1, 0] = x*st + y*ct
-                        self.sim_cdot_des[2, 0] = self._wrap_to_pi(msg.angular.z * 0.3)
-                        self.get_logger().info(f"msgs: {x}, {y}, {t} / cur_t :{self.sim_c[2]}")
-                        self.get_logger().info(f"cdot_des: {self.sim_cdot_des[0, 0]}, {self.sim_cdot_des[1, 0]}, {self.sim_cdot_des[2, 0]}")
+                    ct = math.cos(self.c[2])
+                    st = math.sin(self.c[2])
+                    self.cdot_des[0, 0] = x*ct - y*st
+                    self.cdot_des[1, 0] = x*st + y*ct
+                    self.cdot_des[2, 0] = self._wrap_to_pi(msg.angular.z * 0.3)
+                    self.get_logger().info(f"msgs: {x}, {y}, {t} / cur_t :{self.c[2]}")
+                    self.get_logger().info(f"cdot_des: {self.cdot_des[0, 0]}, {self.cdot_des[1, 0]}, {self.cdot_des[2, 0]}")
             except Exception as e:
                 self.get_logger().error(f"Error in _cmd_callback: {e}")
 
@@ -349,106 +315,55 @@ class Controller(Node):
             return
         
         # Update cluster parameters if configured
-        if self.actual_configured or self.sim_configured:
-            param_start = self.cluster_size * ROVER_DOF - len(self.cluster_params)
-            param_end = self.cluster_size * ROVER_DOF
-            self.c_des[param_start:param_end] = np.reshape(
-                msg.data, (len(msg.data), 1)
-            )
+        param_start = self.cluster_size * ROVER_DOF - len(self.cluster_params)
+        param_end = self.cluster_size * ROVER_DOF
+        self.c_des[param_start:param_end] = np.reshape(
+            msg.data, (len(msg.data), 1)
+        )
 
     def _cluster_desired_callback(self, msg: Float32MultiArray):
         """Update desired cluster position"""
         #self.get_logger().info(f"Received cluster desired position: {msg.data}")
         
-        if self.actual_configured or self.sim_configured:
-            data_length = len(msg.data)
-            self.c_des[0:data_length] = np.reshape(msg.data, (data_length, 1))
+        data_length = len(msg.data)
+        self.c_des[0:data_length] = np.reshape(msg.data, (data_length, 1))
 
     def _timer_callback(self):
         """Main control loop timer callback"""
-        # Configure clusters if enough robots are available
-        self._try_configure_clusters()
         
         # Publish velocity commands if cluster is enabled
         if self.cluster_enable:
-            if self.output == "actual" and self.actual_configured:
-                self._publish_velocities("actual")
-            if self.sim_configured:
-                self._publish_velocities("sim")
+            self._publish_velocities()
         else:
-            if self.sim_configured:
-                self._publish_desired_poses(self.sim_registered_robots)
+            self._publish_desired_poses(self.registered_robots)
 
-    # Cluster management methods
-    def _try_configure_clusters(self):
-        """Try to configure clusters if enough robots are available"""
-        if (self.output == "actual" and not self.actual_configured and 
-            self._count_alive_robots("actual") >= self.cluster_size):
-            self._assign_robots("actual")
-        
-        if (self.output == "sim" and not self.sim_configured and 
-            self._count_alive_robots("sim") >= self.cluster_size):
-            self._assign_robots("sim")
-        #else: 
-        #   self.get_logger().info(f"Not enough robots to assign sim. Output {self.output} Sim Configured {self.sim_configured} Robots Alive {self._count_alive_robots("sim")} ")
-
-    def _assign_robots(self, output: str):
+    def _assign_robots(self):
         """Assign available robots to cluster formation"""
-        if output == "actual":
-            status_dict = self.actual_robot_status
-            self.registered_robots = []
-            
-            # Find available robots
-            for robot_id, robot_status in status_dict.items():
-                if robot_status.is_alive():
-                    self.registered_robots.append(robot_id)
-                if len(self.registered_robots) == self.cluster_size:
-                    break
-            
-            self.actual_configured = True
-            self.sim_registered_robots = self.registered_robots.copy()
-            self.sim_configured = True
-            
-            self.get_logger().info(
-                f"Formed actual cluster with robots: {self.registered_robots} "
-                f"from list: {self.robot_id_list}"
-            )
-            
-        elif output == "sim":
-            status_dict = self.sim_robot_status
-            self.sim_registered_robots = []
-            
-            # Find available simulation robots
-            for robot_id, robot_status in status_dict.items():
-                if robot_status.is_alive():
-                    self.sim_registered_robots.append(robot_id)
-                if len(self.sim_registered_robots) == self.cluster_size:
-                    break
-            
-            self.sim_configured = True
-            
-            self.get_logger().info(
-                f"Formed sim cluster with robots: {self.sim_registered_robots}"
-            )
+        status_dict = self.robot_status
+        
+        for robot_id, robot_status in status_dict.items():
+            self.registered_robots.append(robot_id)
+            if len(self.registered_robots) == self.cluster_size:
+                break
+        
+        self.get_logger().info(
+            f"Formed cluster with robots: {self.registered_robots}"
+        )
 
-    def _count_alive_robots(self, output: str) -> int:
+    def _count_alive_robots(self) -> int:
         """Count the number of robots reporting data"""
-        status_dict = (self.actual_robot_status if output == "actual" 
-                      else self.sim_robot_status)
+        status_dict = self.robot_status
         return sum(1 for status in status_dict.values() if status.is_alive())
 
-    def _publish_velocities(self, output: str):
+    def _publish_velocities(self):
         """Compute and publish velocity commands to robots"""
         # Setup output-specific variables
-        msg_prefix = '' if output == 'actual' else '/sim'
-        cluster_robots = (self.registered_robots if output == "actual" 
-                         else self.sim_registered_robots)
-        robot_status_dict = (self.actual_robot_status if output == "actual" 
-                           else self.sim_robot_status)
+        cluster_robots = self.registered_robots
+        robot_status_dict = self.robot_status
         
         # Handle disabled state
         if not self.enable:
-            self._publish_zero_velocities(msg_prefix, cluster_robots)
+            self._publish_zero_velocities(cluster_robots)
             return
         
         # Gather current robot positions and velocities
@@ -457,32 +372,32 @@ class Controller(Node):
         )
         
         # Get velocity commands from cluster controller
-        cdot_des = self.cdot_des if output == "actual" else self.sim_cdot_des # Desired cluster velocity
+        cdot_des = self.cdot_des # Desired cluster velocity
         cdot_cmd, rdot_des, c_cur = self.cluster.get_velocity_command(
             robot_positions, robot_velocities, self.c_des, cdot_des
         )
 
-        self.sim_c = c_cur
+        self.c = c_cur
         
         # Convert to robot-specific commands and publish
         self._compute_and_publish_robot_commands(
-            msg_prefix, cluster_robots, robot_positions, rdot_des
+            cluster_robots, robot_positions, rdot_des
         )
         
         # Publish cluster information
-        self._publish_cluster_info(msg_prefix, c_cur, robot_positions, rdot_des)
+        self._publish_cluster_info(c_cur, robot_positions, rdot_des)
         
         # Publish desired robot poses
         self._publish_desired_poses(cluster_robots)
 
-    def _publish_zero_velocities(self, msg_prefix: str, cluster_robots: List[str]):
+    def _publish_zero_velocities(self, cluster_robots: List[str]):
         """Publish velocity of 0 to all robots"""
         zero_vel = Twist()
         zero_vel.linear.x = 0.0
         zero_vel.angular.z = 0.0
         
         for robot_id in cluster_robots:
-            self.pubsub.publish(f"{msg_prefix}/{robot_id}/cmd_vel", zero_vel)
+            self.pubsub.publish(f"{self.prefix}/{robot_id}/cmd_vel", zero_vel)
 
     def _gather_robot_data(self, cluster_robots: List[str], 
                         robot_status_dict: Dict[str, RobotStatus]) -> Tuple[np.ndarray, np.ndarray]:
@@ -519,7 +434,7 @@ class Controller(Node):
             zero_velocities = np.zeros((self.cluster_size * ROVER_DOF, 1), dtype=np.float64)
             return zero_positions, zero_velocities
 
-    def _compute_and_publish_robot_commands(self, msg_prefix: str, cluster_robots: List[str], 
+    def _compute_and_publish_robot_commands(self, cluster_robots: List[str], 
                                           robot_positions: np.ndarray, rdot_des: np.ndarray):
         """Compute individual robot commands and publish them"""
         rover_commands = []
@@ -546,7 +461,7 @@ class Controller(Node):
             vel_msg.angular.z = rover_commands[i][1]
             
             try:
-                topic = f"{msg_prefix}/{robot_id}/cmd_vel"
+                topic = f"{self.prefix}/{robot_id}/cmd_vel"
                 self.pubsub.publish(topic, vel_msg)
                 self.get_logger().info(
                     f"Robot {i} velocity[{topic}]: "
@@ -611,7 +526,7 @@ class Controller(Node):
         
         return commands
 
-    def _publish_cluster_info(self, msg_prefix: str, cluster_current: np.ndarray, 
+    def _publish_cluster_info(self, cluster_current: np.ndarray, 
                              robot_positions: np.ndarray, robot_desired_vel: np.ndarray):
         """Publish cluster status information"""
         cluster_msg = ClusterInfo()
@@ -620,7 +535,7 @@ class Controller(Node):
         cluster_msg.rover.data = robot_positions.flatten().tolist()
         cluster_msg.rover_desired.data = robot_desired_vel.flatten().tolist()
         
-        self.pubsub.publish(f"{msg_prefix}/cluster_info", cluster_msg)
+        self.pubsub.publish(f"{self.prefix}/ctrl/cluster_info", cluster_msg)
 
     def _publish_desired_poses(self, cluster_robots: List[str]):
         """Publish desired poses for each robot"""

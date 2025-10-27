@@ -7,7 +7,7 @@ from .ScalarGradient import ScalarGradient, ControlMode
 from std_msgs.msg import Bool, Int16, String, Float32MultiArray, Float64
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Pose2D
-from teleop_core.my_ros_module import PubSubManager
+from gui_package.my_ros_module import PubSubManager
 
 """
 The AN Node manages collects all relevant data from active robots and sends velocity command from the ScalarGradient class.
@@ -31,14 +31,12 @@ class ANNode(Node):
             namespace='',
             parameters=[
                 ('robot_id_list', ["p1", "p2", "p3", "p4", "p5"]),
-                ('sim', True),
                 ('sensor_msg_name', "sensor")
             ]
         )
         params = self._parameters
         self.robot_id_list = self.get_parameter('robot_id_list').value # List of robot IDs to include in gradient calculation
-        self.is_sim = self.get_parameter('sim').value
-        self.prefix = '/sim' if self.is_sim else ''
+        self.prefix = ''
         self.sensor_name = self.get_parameter('sensor_msg_name').value
 
         self.num_robots = len(self.robot_id_list)
@@ -52,17 +50,15 @@ class ANNode(Node):
 
         timer_period = 1 / FREQ 
         self.vel_timer = self.create_timer(timer_period, self.publish_velocities_manager)
-        self.output = "actual" 
         self.enable = False
 
         self.z = DESIRED_SENSOR  # Desired sensor value for the robot to navigate towards, in dBm
 
     def set_pubsub(self):
         """Set up publishers and subscribers."""
-        self.pubsub.create_subscription(Bool, '/joy/hardware', self.hw_sim_callback, 1)
         self.pubsub.create_publisher(Twist, '/ctrl/cmd_vel', 5) #publish to cluster
-        self.pubsub.create_subscription(String, '/modeA', self.update_adaptive_mode, 1)
-        self.pubsub.create_subscription(String, '/modeC', self._mode_callback, 1)
+        self.pubsub.create_subscription(String, '/ctrl/adaptive_mode', self.update_adaptive_mode, 1)
+        self.pubsub.create_subscription(String, '/ctrl/cluster_mode', self._mode_callback, 1)
         for robot_id in self.robot_id_list:
             self.pubsub.create_subscription(
                 Pose2D,
@@ -116,7 +112,7 @@ class ANNode(Node):
                 self.get_logger().warn("No bearing calculated, skipping publish.")
                 return
             else:
-                self.get_logger().info(f"Publishing bearing: {bearing} for output: {'sim' if self.is_sim else 'actual'}")
+                self.get_logger().info(f"Publishing bearing: {bearing} ")
             _msg.linear.x = math.cos(bearing) * KV
             _msg.linear.y = math.sin(bearing) * KV
         if self.num_robots == 5:
@@ -130,6 +126,20 @@ class ANNode(Node):
             _msg.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER) * 1.0
             _msg.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER) * 1.0
             _msg.angular.z = self.clip(gain_t, abs_max=MAX_VEL_CLUSTER) * 0.5
+        
+        self.get_logger().info(f"z2 {self.gradient.robot_positions[1][2]}")
+        self.get_logger().info(f"z3 {self.gradient.robot_positions[2][2]}")
+        self.get_logger().info(f"z4 {self.gradient.robot_positions[3][2]}")
+        self.get_logger().info(f"z5 {self.gradient.robot_positions[4][2]}")
+        self.get_logger().info(f"d1 {dz1}")
+        self.get_logger().info(f"d2 {dz2}")
+        self.get_logger().info(f"d3 {dz3}")
+        self.get_logger().info(f"d4 {dz4}")
+        self.get_logger().info(f"x {self.gradient.mode.gain}*{dz3+dz4} = {gain_x}")
+        self.get_logger().info(f"y {self.gradient.mode.gain}*{dz1+dz2} = {gain_y}")
+        self.get_logger().info(f"t {self.gradient.mode.gain}*{dz3-dz4} = {gain_t}")
+        self.get_logger().info(f"adp {self.gradient.mode.value}, {self.gradient.mode.gain}")
+        self.get_logger().info(f"adp ctrl {_msg.linear.x}, {_msg.linear.y}, {_msg.angular.z}")
 
         self.pubsub.publish('/ctrl/cmd_vel', _msg) #publish velocity command to cluster
     
@@ -139,18 +149,7 @@ class ANNode(Node):
     def publish_velocities_manager(self):
         """ Manage which velocities to publish based on the current output mode."""
         if self.enable:
-            if self.output == "sim" and self.is_sim or self.output == "actual" and not self.is_sim:
-                self.publish_velocities()
-        
-    def hw_sim_callback(self, msg):
-        """Set output mode based on joystick input."""
-        temp = self.output
-        if not msg.data:
-            self.output = "sim"
-        else:
-            self.output = "actual"
-        if temp != self.output:
-            self.get_logger().info(f"Changed output to {self.output} for adaptive navigation.")
+            self.publish_velocities()
 
 def main(args=None):
     rclpy.init(args=args)

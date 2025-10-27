@@ -13,7 +13,7 @@ from geometry_msgs.msg import Pose2D
 
 from pioneer_interfaces.msg import ClusterInfo
 
-from teleop_core.my_ros_module import PubSubManager
+from gui_package.my_ros_module import PubSubManager
 
 from .Controller import Controller
 
