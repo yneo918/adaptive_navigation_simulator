@@ -23,7 +23,7 @@ find_package(xacro REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 install(
-  DIRECTORY src launch rviz config world
+  DIRECTORY src launch rviz config world urdf
   DESTINATION share/${PROJECT_NAME}
 )
 install(DIRECTORY launch meshes DESTINATION share/${PROJECT_NAME}/)

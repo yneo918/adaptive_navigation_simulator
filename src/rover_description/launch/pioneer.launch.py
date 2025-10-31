@@ -19,13 +19,21 @@ COLORS = {
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = launch_ros.substitutions.FindPackageShare(package='rover_description').find('rover_description')
-    xacro_file = os.path.join(pkg_share, f'src/description/pioneer_robot.xacro')
     robot_id = LaunchConfiguration("robot_id").perform(context)
     hw = LaunchConfiguration("hw").perform(context)
     desired = LaunchConfiguration("desired").perform(context)
     x = float(LaunchConfiguration("x").perform(context))
     y = float(LaunchConfiguration("y").perform(context))
     t = float(LaunchConfiguration("t").perform(context))
+
+    # Use pre-compiled URDF files instead of xacro
+    urdf_file = os.path.join(pkg_share, f'urdf/pioneer_{robot_id}.urdf')
+    with open(urdf_file, 'r') as f:
+        robot_description = f.read()
+
+    urdf_desired_file = os.path.join(pkg_share, f'urdf/pioneer_{robot_id}_desired.urdf')
+    with open(urdf_desired_file, 'r') as f:
+        robot_description_desired = f.read()
 
 
     main_nodes = [
@@ -36,11 +44,7 @@ def launch_setup(context, *args, **kwargs):
             namespace=robot_id,
             output="screen",
             parameters=[{
-                "robot_description": Command([
-                    "xacro ", 
-                    xacro_file, 
-                    f" r:={COLORS[robot_id][0]} g:={COLORS[robot_id][1]} b:={COLORS[robot_id][2]} a:=1.0"
-                ]),
+                "robot_description": robot_description,
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
                 "frame_prefix": f"{robot_id}/",
             }]
@@ -94,12 +98,7 @@ def launch_setup(context, *args, **kwargs):
                 namespace=f"{robot_id}desired",
                 output="screen",
                 parameters=[{
-                    "robot_description": Command([
-                        "xacro ", 
-                        xacro_file, 
-                        f" r:={COLORS[robot_id][0]} g:={COLORS[robot_id][1]} b:={COLORS[robot_id][2]} a:=",
-                        LaunchConfiguration("a")                    
-                    ]),
+                    "robot_description": robot_description_desired,
                     "use_sim_time": LaunchConfiguration("use_sim_time"),
                     "frame_prefix": f"{robot_id}desired/",
                 }]
