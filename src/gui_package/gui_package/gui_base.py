@@ -1,16 +1,44 @@
 """Base GUI components for teleop control."""
 
 import math
-from typing import Dict, Any, Optional
+import signal
+from typing import Dict, Any
 from PyQt6.QtWidgets import (
     QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget,
-    QSpinBox, QComboBox, QCheckBox, QDoubleSpinBox, QPushButton
+    QSpinBox, QComboBox, QCheckBox, QDoubleSpinBox, QPushButton,
+    QApplication,
 )
 from PyQt6.QtCore import QTimer
 from std_msgs.msg import Float32MultiArray
 
 from .constants import RoverMode
 from adaptive_nav.ScalarGradient import ControlMode
+
+
+_SIGINT_HANDLER_INSTALLED = False
+
+
+def _install_sigint_handler() -> None:
+    """Ensure Ctrl+C exits the Qt event loop cleanly."""
+    global _SIGINT_HANDLER_INSTALLED
+
+    if _SIGINT_HANDLER_INSTALLED:
+        return
+
+    app = QApplication.instance()
+    if app is None:
+        return
+
+    signal.signal(signal.SIGINT, lambda _sig, _frame: app.quit())
+
+    pump = QTimer(app)
+    pump.setInterval(50)
+    pump.timeout.connect(lambda: None)
+    pump.start()
+    app.aboutToQuit.connect(pump.stop)
+    setattr(app, '_ctrl_c_pump', pump)
+
+    _SIGINT_HANDLER_INSTALLED = True
 
 
 class StatusWindowBase(QMainWindow):
@@ -32,6 +60,8 @@ class StatusWindowBase(QMainWindow):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_status)
         self.update_timer.start(100)  # 10Hz update
+
+        _install_sigint_handler()
         
     def _setup_ui(self) -> None:
         """Setup the main UI layout."""

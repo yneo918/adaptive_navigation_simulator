@@ -182,9 +182,9 @@ class CsvSensorFieldPublisher(Node):
             avg_lat = 0.5 * (lat_rad + lat0)
             delta_lat = lat_rad - lat0
             delta_lon = lon_rad - lon0
-            north = - EARTH_RADIUS_M * delta_lat * scale
             east = EARTH_RADIUS_M * np.cos(avg_lat) * delta_lon * scale
-            converted_xy = np.column_stack((north, east))
+            north = EARTH_RADIUS_M * delta_lat * scale
+            converted_xy = np.column_stack((east, north))
             if dimension == 2:
                 points_array = converted_xy
             else:
@@ -241,12 +241,13 @@ class CsvSensorFieldPublisher(Node):
         return response
 
     def _lookup_value(self, query: np.ndarray) -> float:
-        key = self._make_key(query)
+        internal_query = self._to_internal_coordinates(query[: self.dimension])
+        key = self._make_key(internal_query)
         value = self.lookup_table.get(key)
         if value is not None:
             return value
 
-        deltas = self.points - query[: self.dimension]
+        deltas = self.points - internal_query
         distances = np.linalg.norm(deltas, axis=1)
         nearest_index = int(np.argmin(distances))
         return float(self.values[nearest_index])
@@ -268,9 +269,9 @@ class CsvSensorFieldPublisher(Node):
         delta_lat = lat_rad - lat0
         delta_lon = lon_rad - lon0
         scale = self.latlon_meta['scale']
-        north = EARTH_RADIUS_M * delta_lat * scale
         east = EARTH_RADIUS_M * math.cos(avg_lat) * delta_lon * scale
-        converted = np.array([north, east], dtype=np.float64)
+        north = EARTH_RADIUS_M * delta_lat * scale
+        converted = np.array([east, north], dtype=np.float64)
 
         if coords.shape[0] > 2:
             tail = coords[2:].astype(np.float64)
