@@ -75,6 +75,9 @@ class CsvSensorFieldPublisher(Node):
             for point, value in zip(self.points, self.values)
         }
 
+        self.point_step = struct.calcsize('ffff')
+        self.pointcloud_msg = self._create_pointcloud_message()
+
         self.publisher = self.create_publisher(PointCloud2, pointcloud_topic, 10)
         self.timer = self.create_timer(max(publish_interval, 0.01), self._publish_pointcloud)
 
@@ -194,38 +197,38 @@ class CsvSensorFieldPublisher(Node):
 
         return points_array, values_array, dimension, latlon_meta
 
-    def _publish_pointcloud(self) -> None:
-        header = self.get_clock().now().to_msg()
-        point_step = struct.calcsize('ffff')
-
-        if self.dimension == 2:
-            padded_points = np.column_stack((self.points, np.zeros(len(self.points))))
-        else:
-            padded_points = self.points
-
-        intensity = self.values.astype(np.float32)
-        buffer = bytearray(point_step * len(padded_points))
-        for index, (x, y, z) in enumerate(padded_points):
-            struct.pack_into('ffff', buffer, index * point_step, float(x), float(y), intensity[index], intensity[index])
-
+    def _create_pointcloud_message(self) -> PointCloud2:
         msg = PointCloud2()
-        msg.header.stamp = header
         msg.header.frame_id = self.frame_id
         msg.height = 1
-        msg.width = len(padded_points)
+        msg.width = len(self.points)
         msg.is_dense = False
         msg.is_bigendian = False
-        msg.point_step = point_step
-        msg.row_step = point_step * len(padded_points)
+        msg.point_step = self.point_step
+        msg.row_step = self.point_step * len(self.points)
         msg.fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
             PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
             PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
         ]
-        msg.data = bytes(buffer)
 
-        self.publisher.publish(msg)
+        if self.dimension == 2:
+            padded_points = np.column_stack((self.points, np.zeros(len(self.points))))
+        else:
+            padded_points = self.points
+
+        intensity = self.values.astype(np.float32, copy=False)
+        buffer = bytearray(self.point_step * len(padded_points))
+        for index, (x, y, z) in enumerate(padded_points):
+            struct.pack_into('ffff', buffer, index * self.point_step, float(x), float(y), intensity[index], intensity[index])
+
+        msg.data = bytes(buffer)
+        return msg
+
+    def _publish_pointcloud(self) -> None:
+        self.pointcloud_msg.header.stamp = self.get_clock().now().to_msg()
+        self.publisher.publish(self.pointcloud_msg)
 
     def _handle_request_2d(self, request: GetSensor2D.Request, response: GetSensor2D.Response) -> GetSensor2D.Response:
         query = np.array([request.x, request.y], dtype=np.float64)

@@ -23,7 +23,8 @@ setup(
             'sim_rover = fake_rover_state_controller.sim_rover:main',
             'fake_rover = fake_rover_state_controller.fake_rover:main',
             'fake_sensor = fake_rover_state_controller.fake_sensor:main',
-            'jointstate_publisher = fake_rover_state_controller.jointstate_publisher:main'
+            'jointstate_publisher = fake_rover_state_controller.jointstate_publisher:main',
+            'arrow_publisher = fake_rover_state_controller.arrow_publisher:main',
         ],
     },
 )

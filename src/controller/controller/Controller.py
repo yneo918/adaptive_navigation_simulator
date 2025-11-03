@@ -17,7 +17,7 @@ JOY_FREQ = FREQ # Frequency for joystick commands
 KP_GAIN = 1.0  # Position gain in m/s per m error
 KV_GAIN = 0.2  # Velocity gain in m/s per m/s error
 EPSILON = 0.5  # Distance threshold to consider robot at desired position in meters
-MAX_VEL = 3.0  # Maximum linear+angular velocity in m/s
+MAX_VEL = 10.0  # Maximum linear+angular velocity in m/s
 ROVER_DOF = 3  # (x, y, theta)
 
 class RobotStatus:
@@ -150,6 +150,7 @@ class Controller(Node):
         self.c = np.zeros(array_size)
         self.c_des = np.zeros(array_size)
         self.cdot_des = np.zeros(array_size)
+        self.cmd_vel_alive = 0
         
         # Robot positions and velocities
         self.r = np.zeros(array_size)
@@ -196,6 +197,7 @@ class Controller(Node):
         """Create global topic publishers"""
         publishers = [
             (ClusterInfo, '/ctrl/cluster_info', 5),
+            (Pose2D, '/ctrl/cluster_pose2d', 5),
         ]
         
         for msg_type, topic, qos in publishers:
@@ -275,6 +277,7 @@ class Controller(Node):
         freq = (1.0 / (current_time - self.ctrl_timestamp) 
                 if self.ctrl_timestamp is not None else JOY_FREQ)
         self.ctrl_timestamp = current_time
+        self.cmd_vel_alive = 10
 
         if self.mode == "NAV_M" or self.mode == "ADPTV_NAV_M": #only update cluster if in navigation mode
             try:
@@ -370,6 +373,13 @@ class Controller(Node):
         robot_positions, robot_velocities = self._gather_robot_data(
             cluster_robots, robot_status_dict
         )
+
+        if self.cmd_vel_alive > 0:
+            self.cmd_vel_alive -= 1
+        else:
+            self.cdot_des[0, 0] = 0.0
+            self.cdot_des[1, 0] = 0.0
+            self.cdot_des[2, 0] = 0.0
         
         # Get velocity commands from cluster controller
         cdot_des = self.cdot_des # Desired cluster velocity
@@ -389,6 +399,11 @@ class Controller(Node):
         
         # Publish desired robot poses
         self._publish_desired_poses(cluster_robots)
+
+        self.pubsub.publish(
+            f"{self.prefix}/ctrl/cluster_pose2d",
+            Pose2D(x=float(self.c[0, 0]), y=float(self.c[1, 0]), theta=float(self.c[2, 0]))
+        )
 
     def _publish_zero_velocities(self, cluster_robots: List[str]):
         """Publish velocity of 0 to all robots"""

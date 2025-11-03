@@ -78,6 +78,8 @@ class TopographyField(Node):
         self.undulation_scale_y = max(float(self.get_parameter('undulation_scale_y').value), 1e-6)
 
         self.points, self.elevations = self._generate_field()
+        self.point_step = struct.calcsize('ffff')
+        self.pointcloud_msg = self._create_pointcloud_message()
 
         self.publisher = self.create_publisher(PointCloud2, 'sensor_field/points', 10)
         self.timer = self.create_timer(publish_interval, self._publish_pointcloud)
@@ -141,19 +143,15 @@ class TopographyField(Node):
     def _evaluate_elevation_scalar(self, x: float, y: float) -> float:
         return float(self._evaluate_elevation(np.array([x]), np.array([y]))[0])
 
-    def _publish_pointcloud(self) -> None:
+    def _create_pointcloud_message(self) -> PointCloud2:
         msg = PointCloud2()
-        header = self.get_clock().now().to_msg()
-        msg.header.stamp = header
         msg.header.frame_id = self.frame_id
         msg.height = 1
         msg.width = len(self.points)
         msg.is_dense = False
         msg.is_bigendian = False
-
-        point_step = struct.calcsize('ffff')
-        msg.point_step = point_step
-        msg.row_step = point_step * len(self.points)
+        msg.point_step = self.point_step
+        msg.row_step = self.point_step * len(self.points)
         msg.fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
@@ -161,14 +159,18 @@ class TopographyField(Node):
             PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
         ]
 
-        elevations = self.elevations.astype(np.float32)
-        buffer = bytearray(point_step * len(self.points))
+        elevations = self.elevations.astype(np.float32, copy=False)
+        buffer = bytearray(self.point_step * len(self.points))
         for index, (x_coord, y_coord) in enumerate(self.points):
             value = float(elevations[index])
-            struct.pack_into('ffff', buffer, index * point_step, float(x_coord), float(y_coord), 0.0, value)
+            struct.pack_into('ffff', buffer, index * self.point_step, float(x_coord), float(y_coord), 0.0, value)
 
         msg.data = bytes(buffer)
-        self.publisher.publish(msg)
+        return msg
+
+    def _publish_pointcloud(self) -> None:
+        self.pointcloud_msg.header.stamp = self.get_clock().now().to_msg()
+        self.publisher.publish(self.pointcloud_msg)
 
     def _handle_request_2d(self, request: GetSensor2D.Request, response: GetSensor2D.Response) -> GetSensor2D.Response:
         response.data = self._evaluate_elevation_scalar(request.x, request.y)

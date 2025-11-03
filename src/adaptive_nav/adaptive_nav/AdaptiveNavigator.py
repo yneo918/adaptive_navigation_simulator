@@ -3,9 +3,6 @@ import math
 from enum import Enum
 from typing import List, Literal, Tuple, Optional
 
-__author__ = "Christian Pedrigal" 
-
-
 class ControlMode(Enum):
     """Different control modes for the cluster
 
@@ -73,7 +70,7 @@ class ClusterSize(Enum):
         return self.value
 
 
-class ScalarGradient:
+class AdaptiveNagigator:
     """
     Adaptive Navigation Scalar Gradient Class
     

@@ -11,7 +11,7 @@ MASS_KG = 10.0
 INERTIA_KGM2 = 0.75
 RESPONSE_TIME_S = 0.6
 ANG_RESPONSE_TIME_S = 0.5
-MAX_LINEAR_SPEED = 1.0
+MAX_LINEAR_SPEED = 10.0
 MAX_ANGULAR_SPEED = 1.0
 MAX_FORCE_N = 45.0
 MAX_TORQUE_NM = 6.0
@@ -63,6 +63,12 @@ class SimRover(Node):
             self._command_callback,
             10,
         )
+        self.pubsub.create_subscription(
+            Pose2D,
+            f'{self.prefix}/{self.robot_id}/set_pose2D',
+            self._set_pose_callback,
+            10,
+        )
         self.pubsub.create_publisher(
             Pose2D,
             f'{self.prefix}/{self.robot_id}/pose2D',
@@ -76,6 +82,17 @@ class SimRover(Node):
         self.target_velocity['linear'] = _clamp(msg.linear.x, -MAX_LINEAR_SPEED, MAX_LINEAR_SPEED)
         self.target_velocity['angular'] = _clamp(msg.angular.z, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED)
         self.last_command_time = self.get_clock().now()
+
+    def _set_pose_callback(self, msg: Pose2D) -> None:
+        self.position['x'] = msg.x
+        self.position['y'] = msg.y
+        self.position['theta'] = self._wrap_to_pi(msg.theta)
+        self.current_velocity['linear'] = 0.0
+        self.current_velocity['angular'] = 0.0
+        self.target_velocity['linear'] = 0.0
+        self.target_velocity['angular'] = 0.0
+        self.last_command_time = self.get_clock().now()
+        self._publish_pose()
 
     def _on_timer(self) -> None:
         now = self.get_clock().now()

@@ -20,8 +20,8 @@ FREQ = 10 # Frequency to publish velocity commands
 JOY_FREQ = FREQ
 KV = 0.5  # Gain for computed velocity commands
 MAX_SENSOR = 100.0  # Max expected sensor value in dBm
-MIN_SENSOR = 0.0  # Min expected sensor value in dBm
-DESIRED_SENSOR = -40.0  # Desired sensor value in dBm for cross-track controller
+MIN_SENSOR = -100.0  # Min expected sensor value in dBm
+DESIRED_SENSOR = 40.0  # Desired sensor value in dBm for cross-track controller
 MAX_VEL_CLUSTER = 2.0
 
 class ANNode(Node):
@@ -106,7 +106,7 @@ class ANNode(Node):
     def publish_velocities(self):
         """Compute gradient and publish velocity commands."""
         _msg = Twist()
-        if self.num_robots == 3:
+        if self.gradient.mode.num_robots == 3:
             bearing = self.gradient.get_velocity(zdes=self.normalize(self.z))
             if bearing is None:
                 self.get_logger().warn("No bearing calculated, skipping publish.")
@@ -115,35 +115,113 @@ class ANNode(Node):
                 self.get_logger().info(f"Publishing bearing: {bearing} ")
             _msg.linear.x = math.cos(bearing) * KV
             _msg.linear.y = math.sin(bearing) * KV
-        if self.num_robots == 5:
+        if self.gradient.mode.num_robots == 5:
+            theta = math.atan2(self.gradient.robot_positions[1][1] - self.gradient.robot_positions[0][1],
+                               self.gradient.robot_positions[1][0] - self.gradient.robot_positions[0][0])
+            x1 = self.gradient.robot_positions[3][0] - self.gradient.robot_positions[1][0]
+            x2 = self.gradient.robot_positions[4][0] - self.gradient.robot_positions[2][0]
+            x3 = self.gradient.robot_positions[1][0] - self.gradient.robot_positions[2][0]
+            x4 = self.gradient.robot_positions[3][0] - self.gradient.robot_positions[4][0]
+            y1 = self.gradient.robot_positions[3][1] - self.gradient.robot_positions[1][1]
+            y2 = self.gradient.robot_positions[4][1] - self.gradient.robot_positions[2][1]
+            y3 = self.gradient.robot_positions[1][1] - self.gradient.robot_positions[2][1]
+            y4 = self.gradient.robot_positions[3][1] - self.gradient.robot_positions[4][1]
+            dy1 = -x1*math.sin(theta) + y1*math.cos(theta)
+            dy2 = -x2*math.sin(theta) + y2*math.cos(theta)
+            dx3 = x3*math.cos(theta) + y3*math.sin(theta)
+            dx4 = x4*math.cos(theta) + y4*math.sin(theta)
+
+            def gain_from_Z_and_distance(A, B, C, Zb, Zc, ell, eps=1e-12, clamp_segment=False, epsilon_out=0.0):
+                """
+                Compute gain G(A) from Z slope along BC and signed perpendicular distance from A to line BC.
+                A, B, C: (x, y)
+                Zb, Zc: scalar values at B and C
+                ell: decay length for perpendicular distance (must be > 0)
+                clamp_segment: if True, decay outside the segment [B,C]
+                epsilon_out: minimal weight outside the segment (0..1)
+                """
+                Ax, Ay = A; Bx, By = B; Cx, Cy = C
+                vx, vy = Cx - Bx, Cy - By
+                L = math.hypot(vx, vy)
+                if L < eps:
+                    # Degenerate: B and C coincide -> no well-defined direction; fall back to zero gain
+                    return 0.0
+
+                # Unit direction along BC
+                ux, uy = vx / L, vy / L
+
+                # Vector from B to A
+                rx, ry = Ax - Bx, Ay - By
+
+                # Signed perpendicular distance from A to the line through BC
+                # det(u, r) = u_x * r_y - u_y * r_x
+                d = ux * ry - uy * rx
+
+                # 1D slope of Z along BC
+                s = (Zc - Zb) / L
+
+                # Base distance weight (Gaussian)
+                w_perp = math.exp(- (d / max(ell, eps))**2 )
+
+                w = w_perp
+
+                if clamp_segment:
+                    # Longitudinal projection along BC
+                    t = ux * rx + uy * ry  # signed distance along BC from B
+                    # Segment weight: 1 inside [0, L], fades to epsilon_out outside
+                    inside = 1.0 if (0.0 <= t <= L) else 0.0
+                    w = w_perp * (epsilon_out + (1.0 - epsilon_out) * inside)
+
+                # Final gain
+                G = s * w
+                return G
+
             dz1 = self.gradient.robot_positions[3][2] - self.gradient.robot_positions[1][2]
             dz2 = self.gradient.robot_positions[4][2] - self.gradient.robot_positions[2][2]
             dz3 = self.gradient.robot_positions[1][2] - self.gradient.robot_positions[2][2]
             dz4 = self.gradient.robot_positions[3][2] - self.gradient.robot_positions[4][2]
-            gain_x = self.gradient.mode.gain * (dz3+dz4)
-            gain_y = self.gradient.mode.gain * (dz1+dz2)
-            gain_t = self.gradient.mode.gain * (dz3-dz4)
-            _msg.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER) * 1.0
-            _msg.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER) * 1.0
-            _msg.angular.z = self.clip(gain_t, abs_max=MAX_VEL_CLUSTER) * 0.5
-        
-        self.get_logger().info(f"z2 {self.gradient.robot_positions[1][2]}")
-        self.get_logger().info(f"z3 {self.gradient.robot_positions[2][2]}")
-        self.get_logger().info(f"z4 {self.gradient.robot_positions[3][2]}")
-        self.get_logger().info(f"z5 {self.gradient.robot_positions[4][2]}")
-        self.get_logger().info(f"d1 {dz1}")
-        self.get_logger().info(f"d2 {dz2}")
-        self.get_logger().info(f"d3 {dz3}")
-        self.get_logger().info(f"d4 {dz4}")
-        self.get_logger().info(f"x {self.gradient.mode.gain}*{dz3+dz4} = {gain_x}")
-        self.get_logger().info(f"y {self.gradient.mode.gain}*{dz1+dz2} = {gain_y}")
-        self.get_logger().info(f"t {self.gradient.mode.gain}*{dz3-dz4} = {gain_t}")
-        self.get_logger().info(f"adp {self.gradient.mode.value}, {self.gradient.mode.gain}")
+            gain_x = self.gradient.mode.direction[0] * (dz3+dz4) / (abs(dx3)+abs(dx4)+1e-6) * 3.0
+            gain_y = self.gradient.mode.direction[1] * (dz1+dz2) / (abs(dy1)+abs(dy2)+1e-6) * 3.0
+            #gain_t = self.gradient.mode.direction[2] * (dz3-dz4)
+            
+            gain_t = self.gradient.mode.direction[2] * (
+                gain_from_Z_and_distance(
+                A=(self.gradient.robot_positions[0][0], self.gradient.robot_positions[0][1]),
+                B=(self.gradient.robot_positions[1][0], self.gradient.robot_positions[1][1]),
+                C=(self.gradient.robot_positions[3][0], self.gradient.robot_positions[3][1]),
+                Zb=self.gradient.robot_positions[1][2],
+                Zc=self.gradient.robot_positions[3][2],
+                ell=1.0
+                ) + gain_from_Z_and_distance(
+                A=(self.gradient.robot_positions[0][0], self.gradient.robot_positions[0][1]),
+                B=(self.gradient.robot_positions[4][0], self.gradient.robot_positions[4][1]),
+                C=(self.gradient.robot_positions[2][0], self.gradient.robot_positions[2][1]),
+                Zb=self.gradient.robot_positions[4][2],
+                Zc=self.gradient.robot_positions[2][2],
+                ell=1.0
+                )
+            ) * 10.0
+            
+            _msg.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER)
+            _msg.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER)
+            _msg.angular.z = self.clip(gain_t, abs_max=MAX_VEL_CLUSTER)
+            self.get_logger().info(f"z2 {self.gradient.robot_positions[1][2]}")
+            self.get_logger().info(f"z3 {self.gradient.robot_positions[2][2]}")
+            self.get_logger().info(f"z4 {self.gradient.robot_positions[3][2]}")
+            self.get_logger().info(f"z5 {self.gradient.robot_positions[4][2]}")
+            self.get_logger().info(f"d1 {dz1}")
+            self.get_logger().info(f"d2 {dz2}")
+            self.get_logger().info(f"d3 {dz3}")
+            self.get_logger().info(f"d4 {dz4}")
+            self.get_logger().info(f"x {self.gradient.mode.direction[0]}*{dz3+dz4} = {gain_x}")
+            self.get_logger().info(f"y {self.gradient.mode.direction[1]}*{dz1+dz2} = {gain_y}")
+            self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz3-dz4} = {gain_t}")
+            self.get_logger().info(f"adp {self.gradient.mode.value}")
         self.get_logger().info(f"adp ctrl {_msg.linear.x}, {_msg.linear.y}, {_msg.angular.z}")
 
         self.pubsub.publish('/ctrl/cmd_vel', _msg) #publish velocity command to cluster
     
-    def clip(self, val, abs_max=1.0, gain=10.0):
+    def clip(self, val, abs_max=1.0, gain=100.0):
         return max(min(val*gain, abs_max), -abs_max)
 
     def publish_velocities_manager(self):
