@@ -40,6 +40,13 @@ def generate_launch_description():
             executable='gui_adaptive_navigation',
         ),
 
+        # Forwarding node
+        Node(
+            package='controller',
+            executable='initial_pose_forwarder',
+            condition=IfCondition(LaunchConfiguration('enable_gui')),
+        ),
+
         # RViz visualization
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(display_launch_file),

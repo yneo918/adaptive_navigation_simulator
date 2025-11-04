@@ -7,7 +7,7 @@ from rclpy.node import Node
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QLabel, QDoubleSpinBox
 from PyQt6.QtCore import QTimer
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Pose2D
 from std_msgs.msg import Bool, Int16, String, Float32MultiArray
 from pioneer_interfaces.msg import ClusterInfo
 
@@ -63,6 +63,9 @@ class AdaptiveNavigationGUI(Node):
             Float32MultiArray, '/ctrl/cluster_params', DEFAULT_QOS)
         self.pubsub.create_publisher(
             Float32MultiArray, '/ctrl/cluster_desired', DEFAULT_QOS)
+        for i in range(1, self.n_rover + 1):
+            self.pubsub.create_publisher(
+                Pose2D, f'/p{i}/set_pose2D', 10)
             
     def _setup_subscriptions(self) -> None:
         """Setup additional subscriptions."""
@@ -72,6 +75,9 @@ class AdaptiveNavigationGUI(Node):
         self.pubsub.create_subscription(
             ClusterInfo, '/ctrl/cluster_info', 
             self.cluster_info_callback, DEFAULT_QOS)
+        self.pubsub.create_subscription(
+            Pose2D, 'rviz/pose2D', 
+            self._rviz_pose_callback, 10)
             
     def cluster_info_callback(self, msg: ClusterInfo) -> None:
         """Handle cluster info updates."""
@@ -131,6 +137,14 @@ class AdaptiveNavigationGUI(Node):
             self.cluster_x = msg.data[0]
             self.cluster_y = msg.data[1]
             self.cluster_t = msg.data[2]
+    
+    def _rviz_pose_callback(self, msg: Pose2D) -> None:
+        for i in range(1, self.n_rover + 1):
+            pose_msg = Pose2D()
+            pose_msg.x = msg.x
+            pose_msg.y = msg.y
+            pose_msg.theta = msg.theta
+            self.pubsub.publish(f'/p{i}/set_pose2D', pose_msg)
 
 
 
