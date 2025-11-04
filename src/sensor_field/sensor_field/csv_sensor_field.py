@@ -37,8 +37,10 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('fill_rect_max', '')
         self.declare_parameter('fill_spacing', 1.0)
         self.declare_parameter('fill_radius', 0.0)
-        self.declare_parameter('fill_neighbor_count', 3)
+        self.declare_parameter('fill_neighbor_count', 12)
         self.declare_parameter('fill_weight_power', 2.0)
+        self.declare_parameter('fill_method', 'idw')
+        self.declare_parameter('fill_tps_regularization', 1e-5)
         self.declare_parameter('service_inputs_latlon', False)
 
         csv_path = self.get_parameter('csv_path').get_parameter_value().string_value
@@ -78,6 +80,10 @@ class CsvSensorFieldPublisher(Node):
             self.get_parameter('fill_neighbor_count').get_parameter_value().integer_value
         )
         fill_weight_power = self.get_parameter('fill_weight_power').get_parameter_value().double_value
+        fill_method = self.get_parameter('fill_method').get_parameter_value().string_value or 'idw'
+        fill_tps_regularization = (
+            self.get_parameter('fill_tps_regularization').get_parameter_value().double_value
+        )
 
         if fill_spacing <= 0.0:
             raise ValueError('Parameter "fill_spacing" must be positive.')
@@ -87,6 +93,10 @@ class CsvSensorFieldPublisher(Node):
             raise ValueError('Parameter "fill_neighbor_count" must be a positive integer.')
         if fill_weight_power <= 0.0:
             raise ValueError('Parameter "fill_weight_power" must be positive.')
+        if fill_method not in ('idw', 'thin_plate'):
+            raise ValueError('Parameter "fill_method" must be either "idw" or "thin_plate".')
+        if fill_tps_regularization < 0.0:
+            raise ValueError('Parameter "fill_tps_regularization" must be non-negative.')
 
         fill_min = self._parse_rect_corner(fill_rect_min_param)
         fill_max = self._parse_rect_corner(fill_rect_max_param)
@@ -102,23 +112,31 @@ class CsvSensorFieldPublisher(Node):
             interpret_latlon,
             distance_scale,
         )
+        self.dimension = dimension
         self.interpolation_radius = float(fill_radius)
         self.fill_neighbor_count = int(fill_neighbor_count)
         self.fill_weight_power = float(fill_weight_power)
+        self.fill_method = fill_method
+        self.fill_tps_regularization = float(fill_tps_regularization)
 
         self.source_points = points.copy()
         self.source_values = values.copy()
+        self._tps_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        self._tps_tail_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        self._tps_ready = False
+
+        if self.fill_method == 'thin_plate':
+            self._prepare_tps_models(self.source_points, self.source_values)
 
         base_points, base_values, fill_points, fill_values = self._augment_with_grid(
             self.source_points,
             self.source_values,
-            dimension,
+            self.dimension,
             fill_min,
             fill_max,
             float(fill_spacing),
             float(fill_radius),
         )
-        self.dimension = dimension
         self.frame_id = frame_id
         self.points = base_points
         self.values = base_values
@@ -144,11 +162,9 @@ class CsvSensorFieldPublisher(Node):
         )
 
         self.publisher = self.create_publisher(PointCloud2, pointcloud_topic, 10)
-        self.fill_publisher = (
-            self.create_publisher(PointCloud2, fill_pointcloud_topic, 10)
-            if fill_pointcloud_topic
-            else None
-        )
+        self.fill_publisher = None
+        if fill_pointcloud_topic and self.fill_points.size > 0:
+            self.fill_publisher = self.create_publisher(PointCloud2, fill_pointcloud_topic, 10)
         self.timer = self.create_timer(max(publish_interval, 0.01), self._publish_pointclouds)
 
         self.column_names = {
@@ -337,7 +353,7 @@ class CsvSensorFieldPublisher(Node):
         if value is not None:
             return value
 
-        interpolated, _, _, _ = self._interpolate_from_samples(
+        interpolated, _, _, _, _ = self._interpolate_from_samples(
             internal_query,
             self.points,
             self.values,
@@ -392,6 +408,100 @@ class CsvSensorFieldPublisher(Node):
         except ValueError as exc:
             raise ValueError('Rectangle corner values must be numeric.') from exc
 
+    def _prepare_tps_models(self, sample_points: np.ndarray, sample_values: np.ndarray) -> None:
+        if sample_points.shape[1] < 2:
+            self.get_logger().warning(
+                'fill_method "thin_plate" requires at least two spatial dimensions; falling back to IDW.'
+            )
+            self.fill_method = 'idw'
+            return
+
+        sample_count = sample_points.shape[0]
+        if sample_count < 3:
+            self.get_logger().warning(
+                'fill_method "thin_plate" requires at least three samples; falling back to IDW.'
+            )
+            self.fill_method = 'idw'
+            return
+
+        xy = sample_points[:, :2]
+
+        try:
+            main_model = self._build_tps_model(xy, sample_values)
+        except np.linalg.LinAlgError as exc:
+            self.get_logger().warning(
+                'Thin-plate spline preparation failed (%s); falling back to IDW.', str(exc)
+            )
+            self.fill_method = 'idw'
+            return
+
+        tail_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        if self.dimension > 2:
+            for axis in range(2, self.dimension):
+                axis_values = sample_points[:, axis]
+                try:
+                    tail_models.append(self._build_tps_model(xy, axis_values))
+                except np.linalg.LinAlgError as exc:
+                    self.get_logger().warning(
+                        'Thin-plate spline for extra dimension failed (%s); falling back to IDW.',
+                        str(exc),
+                    )
+                    self.fill_method = 'idw'
+                    return
+
+        self._tps_models = [main_model]
+        self._tps_tail_models = tail_models
+        self._tps_ready = True
+
+    def _build_tps_model(
+        self,
+        xy: np.ndarray,
+        values: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        n_samples = xy.shape[0]
+        diff = xy[:, None, :] - xy[None, :, :]
+        r = np.linalg.norm(diff, axis=2)
+        kernel = self._tps_kernel(r)
+        if self.fill_tps_regularization > 0.0:
+            kernel += self.fill_tps_regularization * np.eye(n_samples, dtype=np.float64)
+
+        p = np.column_stack((np.ones(n_samples), xy))
+
+        system = np.zeros((n_samples + 3, n_samples + 3), dtype=np.float64)
+        system[:n_samples, :n_samples] = kernel
+        system[:n_samples, n_samples:] = p
+        system[n_samples:, :n_samples] = p.T
+
+        rhs = np.zeros(n_samples + 3, dtype=np.float64)
+        rhs[:n_samples] = values
+
+        try:
+            solution = np.linalg.solve(system, rhs)
+        except np.linalg.LinAlgError:
+            solution, *_ = np.linalg.lstsq(system, rhs, rcond=None)
+
+        weights = solution[:n_samples]
+        affine = solution[n_samples:]
+        return weights.astype(np.float64), affine.astype(np.float64), xy.astype(np.float64)
+
+    @staticmethod
+    def _tps_kernel(r: np.ndarray) -> np.ndarray:
+        with np.errstate(divide='ignore', invalid='ignore'):
+            result = r * r * np.where(r > 0.0, np.log(r), 0.0)
+        result[np.isnan(result)] = 0.0
+        return result
+
+    @staticmethod
+    def _evaluate_tps_model(
+        model: Tuple[np.ndarray, np.ndarray, np.ndarray],
+        query_xy: np.ndarray,
+    ) -> float:
+        weights, affine, control_points = model
+        distances = np.linalg.norm(control_points - query_xy, axis=1)
+        kernel = CsvSensorFieldPublisher._tps_kernel(distances)
+        value = float(np.dot(weights, kernel) + affine[0] + affine[1] * query_xy[0] + affine[2] * query_xy[1])
+        return value
+
     def _augment_with_grid(
         self,
         source_points: np.ndarray,
@@ -428,7 +538,13 @@ class CsvSensorFieldPublisher(Node):
                 candidate_xy = np.array([x, y], dtype=np.float64)
 
                 try:
-                    interpolated_value, neighbor_indices, weights, _ = (
+                    (
+                        interpolated_value,
+                        neighbor_indices,
+                        weights,
+                        _,
+                        tail_values,
+                    ) = (
                         self._interpolate_from_samples(
                             candidate_xy,
                             source_points,
@@ -440,9 +556,12 @@ class CsvSensorFieldPublisher(Node):
                     continue
 
                 if dimension > 2:
-                    neighbor_coords = source_points[neighbor_indices, 2:]
-                    averaged_tail = np.average(neighbor_coords, axis=0, weights=weights)
-                    candidate_tail = np.atleast_1d(averaged_tail).astype(np.float64)
+                    if tail_values is not None:
+                        candidate_tail = np.atleast_1d(tail_values).astype(np.float64)
+                    else:
+                        neighbor_coords = source_points[neighbor_indices, 2:]
+                        averaged_tail = np.average(neighbor_coords, axis=0, weights=weights)
+                        candidate_tail = np.atleast_1d(averaged_tail).astype(np.float64)
                     candidate = np.concatenate((candidate_xy, candidate_tail))
                 else:
                     candidate = candidate_xy
@@ -474,13 +593,23 @@ class CsvSensorFieldPublisher(Node):
         sample_points: np.ndarray,
         sample_values: np.ndarray,
         radius: float,
-    ) -> Tuple[float, np.ndarray, np.ndarray, float]:
+    ) -> Tuple[float, np.ndarray, np.ndarray, float, Optional[np.ndarray]]:
         if sample_points.size == 0:
             raise ValueError('Sensor field is empty; cannot interpolate values.')
 
         dims = min(2, sample_points.shape[1])
         query_slice = query[:dims]
         dataset_slice = sample_points[:, :dims]
+
+        if self.fill_method == 'thin_plate' and self._tps_ready:
+            main_value = self._evaluate_tps_model(self._tps_models[0], query_slice)
+            tail_values = None
+            if self.dimension > 2 and self._tps_tail_models:
+                tail_values = np.asarray(
+                    [self._evaluate_tps_model(model, query_slice) for model in self._tps_tail_models],
+                    dtype=np.float64,
+                )
+            return main_value, np.array([], dtype=int), np.array([], dtype=np.float64), 0.0, tail_values
 
         distances = np.linalg.norm(dataset_slice - query_slice, axis=1)
         if distances.size == 0:
@@ -489,7 +618,16 @@ class CsvSensorFieldPublisher(Node):
         zero_mask = distances <= 1e-6
         if np.any(zero_mask):
             first_index = int(np.where(zero_mask)[0][0])
-            return float(sample_values[first_index]), np.array([first_index]), np.array([1.0], dtype=np.float64), 0.0
+            tail_values = None
+            if self.dimension > 2:
+                tail_values = sample_points[first_index, 2:].astype(np.float64)
+            return (
+                float(sample_values[first_index]),
+                np.array([first_index]),
+                np.array([1.0], dtype=np.float64),
+                0.0,
+                tail_values,
+            )
 
         candidate_indices = np.arange(distances.size)
         if radius > 0.0:
@@ -515,7 +653,19 @@ class CsvSensorFieldPublisher(Node):
 
         interpolated = float(np.dot(sample_values[neighbor_indices], weights))
         min_distance = float(np.min(neighbor_distances))
-        return interpolated, neighbor_indices, weights.astype(np.float64), min_distance
+
+        tail_values = None
+        if self.dimension > 2:
+            neighbor_coords = sample_points[neighbor_indices, 2:]
+            tail_values = np.average(neighbor_coords, axis=0, weights=weights)
+
+        return (
+            interpolated,
+            neighbor_indices,
+            weights.astype(np.float64),
+            min_distance,
+            None if tail_values is None else np.asarray(tail_values, dtype=np.float64),
+        )
 
 
 def main(args=None) -> None:
