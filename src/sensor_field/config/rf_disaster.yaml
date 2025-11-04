@@ -7,4 +7,7 @@ csv_sensor_field:
     column_x: latitude
     column_y: longitude
     column_data: radiation
-    distance_scale: 0.002
+    distance_scale: 0.01
+    fill_rect_min: -240,0
+    fill_rect_max: 100,500
+    fill_method: thin_plate

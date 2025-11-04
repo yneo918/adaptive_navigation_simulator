@@ -20,7 +20,7 @@ FREQ = 10 # Frequency to publish velocity commands
 JOY_FREQ = FREQ
 KV = 0.5  # Gain for computed velocity commands
 MAX_SENSOR = 100.0  # Max expected sensor value in dBm
-MIN_SENSOR = -100.0  # Min expected sensor value in dBm
+MIN_SENSOR = 0.0  # Min expected sensor value in dBm
 DESIRED_SENSOR = 40.0  # Desired sensor value in dBm for cross-track controller
 MAX_VEL_CLUSTER = 2.0
 
