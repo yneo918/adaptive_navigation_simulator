@@ -103,123 +103,249 @@ class ANNode(Node):
         else:
             self.enable = False
 
+    def _compute_gain_from_Z_and_distance(self, A, B, C, Zb, Zc, ell, eps=1e-12,
+                                          clamp_segment=False, epsilon_out=0.0):
+        """
+        Compute gain G(A) from Z slope along BC and signed perpendicular distance from A to line BC.
+
+        Args:
+            A, B, C: (x, y) coordinates
+            Zb, Zc: scalar values at B and C
+            ell: decay length for perpendicular distance (must be > 0)
+            eps: small value to avoid division by zero
+            clamp_segment: if True, decay outside the segment [B,C]
+            epsilon_out: minimal weight outside the segment (0..1)
+
+        Returns:
+            Computed gain value
+        """
+        Ax, Ay = A
+        Bx, By = B
+        Cx, Cy = C
+
+        # Vector along BC
+        vx, vy = Cx - Bx, Cy - By
+        segment_length = math.hypot(vx, vy)
+
+        if segment_length < eps:
+            # Degenerate case: B and C coincide -> no well-defined direction
+            return 0.0
+
+        # Unit direction along BC
+        ux, uy = vx / segment_length, vy / segment_length
+
+        # Vector from B to A
+        rx, ry = Ax - Bx, Ay - By
+
+        # Signed perpendicular distance from A to the line through BC
+        perpendicular_distance = ux * ry - uy * rx
+
+        # 1D slope of Z along BC
+        slope = (Zc - Zb) / segment_length
+
+        # Base distance weight (Gaussian)
+        weight_perp = math.exp(-(perpendicular_distance / max(ell, eps))**2)
+        weight = weight_perp
+
+        if clamp_segment:
+            # Longitudinal projection along BC
+            longitudinal_distance = ux * rx + uy * ry  # signed distance along BC from B
+            # Segment weight: 1 inside [0, L], fades to epsilon_out outside
+            is_inside = 1.0 if (0.0 <= longitudinal_distance <= segment_length) else 0.0
+            weight = weight_perp * (epsilon_out + (1.0 - epsilon_out) * is_inside)
+
+        # Final gain
+        gain = slope * weight
+        return gain
+
+    def _compute_unit_vectors_from_AB(self, A, B, eps=1e-6):
+        """
+        Return unit vectors x (parallel to AB) and y (orthogonal, 90° counterclockwise).
+
+        Args:
+            A, B: numpy arrays representing points
+            eps: small value to avoid division by zero
+
+        Returns:
+            Tuple of (x_unit, y_unit) vectors
+        """
+        AB = B - A
+        norm_AB = np.linalg.norm(AB)
+
+        # Avoid division by zero
+        if norm_AB < eps:
+            norm_AB = eps
+
+        # Unit vector x (same direction as AB)
+        x_unit = AB / norm_AB
+
+        # Unit vector y (90° counterclockwise rotation)
+        y_unit = np.array([-x_unit[1], x_unit[0]])
+
+        return x_unit, y_unit
+
+    def _decompose_vector_CD(self, A, B, C, D, eps=1e-6):
+        """
+        Decompose vector CD into components a*x + b*y based on AB direction.
+
+        Args:
+            A, B, C, D: numpy arrays representing points
+            eps: small value to avoid division by zero
+
+        Returns:
+            Tuple of (a, b, CD_reconstructed, x_unit, y_unit)
+        """
+        # Compute unit vectors (based on AB)
+        x_unit, y_unit = self._compute_unit_vectors_from_AB(A, B, eps)
+
+        # Compute CD vector
+        CD = D - C
+
+        # Scalar components along x and y
+        component_x = np.dot(CD, x_unit)
+        component_y = np.dot(CD, y_unit)
+
+        # Reconstructed vector (for verification)
+        CD_reconstructed = component_x * x_unit + component_y * y_unit
+
+        return component_x, component_y, CD_reconstructed, x_unit, y_unit
+
+    def _get_robot_position_2d(self, robot_index):
+        """Get 2D position (x, y) of a robot by index."""
+        return np.array([
+            self.gradient.robot_positions[robot_index][0],
+            self.gradient.robot_positions[robot_index][1]
+        ])
+
+    def _get_robot_sensor_value(self, robot_index):
+        """Get sensor value (z) of a robot by index."""
+        return self.gradient.robot_positions[robot_index][2]
+
+    def _compute_velocity_3_robot_mode(self):
+        """
+        Compute velocity commands for 3-robot mode.
+
+        Returns:
+            Twist message with computed velocities, or None if calculation fails
+        """
+        bearing = self.gradient.get_velocity(zdes=self.normalize(self.z))
+        if bearing is None:
+            self.get_logger().warn("No bearing calculated, skipping publish.")
+            return None
+
+        self.get_logger().info(f"Publishing bearing: {bearing}")
+
+        cmd_vel = Twist()
+        cmd_vel.linear.x = math.cos(bearing) * KV
+        cmd_vel.linear.y = math.sin(bearing) * KV
+        return cmd_vel
+
+    def _compute_velocity_5_robot_mode(self):
+        """
+        Compute velocity commands for 5-robot mode.
+
+        Returns:
+            Twist message with computed velocities
+        """
+        # Get robot positions as numpy arrays
+        pos_robot0 = self._get_robot_position_2d(0)
+        pos_robot1 = self._get_robot_position_2d(1)
+        pos_robot2 = self._get_robot_position_2d(2)
+        pos_robot3 = self._get_robot_position_2d(3)
+        pos_robot4 = self._get_robot_position_2d(4)
+
+        # Get sensor values (z-coordinates in scalar field)
+        z_robot1 = self._get_robot_sensor_value(1)
+        z_robot2 = self._get_robot_sensor_value(2)
+        z_robot3 = self._get_robot_sensor_value(3)
+        z_robot4 = self._get_robot_sensor_value(4)
+
+        # Compute sensor value differences
+        dz_3_to_1 = z_robot3 - z_robot1
+        dz_4_to_2 = z_robot4 - z_robot2
+        dz_1_to_2 = z_robot1 - z_robot2
+        dz_3_to_4 = z_robot3 - z_robot4
+
+        # Decompose vectors to compute gain components
+        # For x-direction gain
+        comp_x_BC, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
+        comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
+        gain_x = self.gradient.mode.direction[0] * (dz_1_to_2 / comp_x_BC + dz_3_to_4 / comp_x_DE) * 1.0
+
+        # For y-direction gain
+        _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
+        _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
+        gain_y = self.gradient.mode.direction[1] * (dz_3_to_1 / comp_y_BD + dz_4_to_2 / comp_y_CE) * 1.0
+
+        # For rotational gain (cross-track error)
+        gain_cross_track_1 = self._compute_gain_from_Z_and_distance(
+            A=(pos_robot0[0], pos_robot0[1]),
+            B=(pos_robot1[0], pos_robot1[1]),
+            C=(pos_robot4[0], pos_robot4[1]),
+            Zb=z_robot1,
+            Zc=z_robot4,
+            ell=1.0
+        )
+        gain_cross_track_2 = self._compute_gain_from_Z_and_distance(
+            A=(pos_robot0[0], pos_robot0[1]),
+            B=(pos_robot3[0], pos_robot3[1]),
+            C=(pos_robot2[0], pos_robot2[1]),
+            Zb=z_robot3,
+            Zc=z_robot2,
+            ell=1.0
+        )
+        gain_angular = self.gradient.mode.direction[2] * (gain_cross_track_1 + gain_cross_track_2) * 10.0
+
+        # Create velocity command message
+        cmd_vel = Twist()
+        cmd_vel.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.angular.z = self.clip(gain_angular, abs_max=MAX_VEL_CLUSTER)
+
+        # Log debug information
+        self._log_5_robot_debug_info(
+            z_values=(z_robot1, z_robot2, z_robot3, z_robot4),
+            dz_values=(dz_3_to_1, dz_4_to_2, dz_1_to_2, dz_3_to_4),
+            gains=(gain_x, gain_y, gain_angular)
+        )
+
+        return cmd_vel
+
+    def _log_5_robot_debug_info(self, z_values, dz_values, gains):
+        """Log debug information for 5-robot mode."""
+        z_robot1, z_robot2, z_robot3, z_robot4 = z_values
+        dz_3_to_1, dz_4_to_2, dz_1_to_2, dz_3_to_4 = dz_values
+        gain_x, gain_y, gain_angular = gains
+
+        self.get_logger().info(f"z2 {z_robot1}")
+        self.get_logger().info(f"z3 {z_robot2}")
+        self.get_logger().info(f"z4 {z_robot3}")
+        self.get_logger().info(f"z5 {z_robot4}")
+        self.get_logger().info(f"d1 {dz_3_to_1}")
+        self.get_logger().info(f"d2 {dz_4_to_2}")
+        self.get_logger().info(f"d3 {dz_1_to_2}")
+        self.get_logger().info(f"d4 {dz_3_to_4}")
+        self.get_logger().info(f"x {self.gradient.mode.direction[0]}*{dz_1_to_2+dz_3_to_4} = {gain_x}")
+        self.get_logger().info(f"y {self.gradient.mode.direction[1]}*{dz_3_to_1+dz_4_to_2} = {gain_y}")
+        self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz_1_to_2-dz_3_to_4} = {gain_angular}")
+        self.get_logger().info(f"adp {self.gradient.mode.value}")
+
     def publish_velocities(self):
         """Compute gradient and publish velocity commands."""
-        _msg = Twist()
+        cmd_vel = None
+
         if self.gradient.mode.num_robots == 3:
-            bearing = self.gradient.get_velocity(zdes=self.normalize(self.z))
-            if bearing is None:
-                self.get_logger().warn("No bearing calculated, skipping publish.")
+            cmd_vel = self._compute_velocity_3_robot_mode()
+            if cmd_vel is None:
                 return
-            else:
-                self.get_logger().info(f"Publishing bearing: {bearing} ")
-            _msg.linear.x = math.cos(bearing) * KV
-            _msg.linear.y = math.sin(bearing) * KV
-        if self.gradient.mode.num_robots == 5:
-            theta = math.atan2(self.gradient.robot_positions[1][1] - self.gradient.robot_positions[0][1],
-                               self.gradient.robot_positions[1][0] - self.gradient.robot_positions[0][0])
-            x1 = self.gradient.robot_positions[3][0] - self.gradient.robot_positions[1][0]
-            x2 = self.gradient.robot_positions[4][0] - self.gradient.robot_positions[2][0]
-            x3 = self.gradient.robot_positions[1][0] - self.gradient.robot_positions[2][0]
-            x4 = self.gradient.robot_positions[3][0] - self.gradient.robot_positions[4][0]
-            y1 = self.gradient.robot_positions[3][1] - self.gradient.robot_positions[1][1]
-            y2 = self.gradient.robot_positions[4][1] - self.gradient.robot_positions[2][1]
-            y3 = self.gradient.robot_positions[1][1] - self.gradient.robot_positions[2][1]
-            y4 = self.gradient.robot_positions[3][1] - self.gradient.robot_positions[4][1]
-            dy1 = -x1*math.sin(theta) + y1*math.cos(theta)
-            dy2 = -x2*math.sin(theta) + y2*math.cos(theta)
-            dx3 = x3*math.cos(theta) + y3*math.sin(theta)
-            dx4 = x4*math.cos(theta) + y4*math.sin(theta)
+        elif self.gradient.mode.num_robots == 5:
+            cmd_vel = self._compute_velocity_5_robot_mode()
+        else:
+            self.get_logger().warn(f"Unsupported num_robots: {self.gradient.mode.num_robots}")
+            cmd_vel = Twist()
 
-            def gain_from_Z_and_distance(A, B, C, Zb, Zc, ell, eps=1e-12, clamp_segment=False, epsilon_out=0.0):
-                """
-                Compute gain G(A) from Z slope along BC and signed perpendicular distance from A to line BC.
-                A, B, C: (x, y)
-                Zb, Zc: scalar values at B and C
-                ell: decay length for perpendicular distance (must be > 0)
-                clamp_segment: if True, decay outside the segment [B,C]
-                epsilon_out: minimal weight outside the segment (0..1)
-                """
-                Ax, Ay = A; Bx, By = B; Cx, Cy = C
-                vx, vy = Cx - Bx, Cy - By
-                L = math.hypot(vx, vy)
-                if L < eps:
-                    # Degenerate: B and C coincide -> no well-defined direction; fall back to zero gain
-                    return 0.0
-
-                # Unit direction along BC
-                ux, uy = vx / L, vy / L
-
-                # Vector from B to A
-                rx, ry = Ax - Bx, Ay - By
-
-                # Signed perpendicular distance from A to the line through BC
-                # det(u, r) = u_x * r_y - u_y * r_x
-                d = ux * ry - uy * rx
-
-                # 1D slope of Z along BC
-                s = (Zc - Zb) / L
-
-                # Base distance weight (Gaussian)
-                w_perp = math.exp(- (d / max(ell, eps))**2 )
-
-                w = w_perp
-
-                if clamp_segment:
-                    # Longitudinal projection along BC
-                    t = ux * rx + uy * ry  # signed distance along BC from B
-                    # Segment weight: 1 inside [0, L], fades to epsilon_out outside
-                    inside = 1.0 if (0.0 <= t <= L) else 0.0
-                    w = w_perp * (epsilon_out + (1.0 - epsilon_out) * inside)
-
-                # Final gain
-                G = s * w
-                return G
-
-            dz1 = self.gradient.robot_positions[3][2] - self.gradient.robot_positions[1][2]
-            dz2 = self.gradient.robot_positions[4][2] - self.gradient.robot_positions[2][2]
-            dz3 = self.gradient.robot_positions[1][2] - self.gradient.robot_positions[2][2]
-            dz4 = self.gradient.robot_positions[3][2] - self.gradient.robot_positions[4][2]
-            gain_x = self.gradient.mode.direction[0] * (dz3+dz4) / (abs(dx3)+abs(dx4)+1e-6) * 3.0
-            gain_y = self.gradient.mode.direction[1] * (dz1+dz2) / (abs(dy1)+abs(dy2)+1e-6) * 3.0
-            #gain_t = self.gradient.mode.direction[2] * (dz3-dz4)
-            
-            gain_t = self.gradient.mode.direction[2] * (
-                gain_from_Z_and_distance(
-                A=(self.gradient.robot_positions[0][0], self.gradient.robot_positions[0][1]),
-                B=(self.gradient.robot_positions[1][0], self.gradient.robot_positions[1][1]),
-                C=(self.gradient.robot_positions[3][0], self.gradient.robot_positions[3][1]),
-                Zb=self.gradient.robot_positions[1][2],
-                Zc=self.gradient.robot_positions[3][2],
-                ell=1.0
-                ) + gain_from_Z_and_distance(
-                A=(self.gradient.robot_positions[0][0], self.gradient.robot_positions[0][1]),
-                B=(self.gradient.robot_positions[4][0], self.gradient.robot_positions[4][1]),
-                C=(self.gradient.robot_positions[2][0], self.gradient.robot_positions[2][1]),
-                Zb=self.gradient.robot_positions[4][2],
-                Zc=self.gradient.robot_positions[2][2],
-                ell=1.0
-                )
-            ) * 10.0
-            
-            _msg.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER)
-            _msg.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER)
-            _msg.angular.z = self.clip(gain_t, abs_max=MAX_VEL_CLUSTER)
-            self.get_logger().info(f"z2 {self.gradient.robot_positions[1][2]}")
-            self.get_logger().info(f"z3 {self.gradient.robot_positions[2][2]}")
-            self.get_logger().info(f"z4 {self.gradient.robot_positions[3][2]}")
-            self.get_logger().info(f"z5 {self.gradient.robot_positions[4][2]}")
-            self.get_logger().info(f"d1 {dz1}")
-            self.get_logger().info(f"d2 {dz2}")
-            self.get_logger().info(f"d3 {dz3}")
-            self.get_logger().info(f"d4 {dz4}")
-            self.get_logger().info(f"x {self.gradient.mode.direction[0]}*{dz3+dz4} = {gain_x}")
-            self.get_logger().info(f"y {self.gradient.mode.direction[1]}*{dz1+dz2} = {gain_y}")
-            self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz3-dz4} = {gain_t}")
-            self.get_logger().info(f"adp {self.gradient.mode.value}")
-        self.get_logger().info(f"adp ctrl {_msg.linear.x}, {_msg.linear.y}, {_msg.angular.z}")
-
-        self.pubsub.publish('/ctrl/cmd_vel', _msg) #publish velocity command to cluster
+        self.get_logger().info(f"adp ctrl {cmd_vel.linear.x}, {cmd_vel.linear.y}, {cmd_vel.angular.z}")
+        self.pubsub.publish('/ctrl/cmd_vel', cmd_vel)
     
     def clip(self, val, abs_max=1.0, gain=100.0):
         return max(min(val*gain, abs_max), -abs_max)

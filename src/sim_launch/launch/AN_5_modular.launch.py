@@ -29,6 +29,7 @@ def generate_launch_description():
     # Launch file paths
     controller_launch = os.path.join(sim_launch_dir, 'controller.launch.py')
     sensor_field_launch = os.path.join(sim_launch_dir, 'disaster_sensor_field.launch.py')
+    #sensor_field_launch = os.path.join(sim_launch_dir, 'sensor_field.launch.py')
     visualization_launch = os.path.join(sim_launch_dir, 'visualization.launch.py')
     robots_launch = os.path.join(sim_launch_dir, 'pioneer_5.launch.py')
 
