@@ -7,7 +7,7 @@ Panels:
         - /PointCloud21
         - /PointCloud22
       Splitter Ratio: 0.5
-    Tree Height: 1567
+    Tree Height: 303
 Visualization Manager:
   Class: ""
   Displays:
@@ -978,6 +978,16 @@ Visualization Manager:
     - Class: rviz_default_plugins/FocusCamera
     - Class: rviz_default_plugins/Measure
       Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: initialpose
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -985,7 +995,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 760.2828979492188
+      Distance: 535.0757446289062
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -1003,7 +1013,7 @@ Visualization Manager:
       Pitch: 1.1497961282730103
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.71857213973999
+      Yaw: 4.713572025299072
     Saved: ~
 Window Geometry:
   Displays:

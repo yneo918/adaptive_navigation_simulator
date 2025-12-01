@@ -79,7 +79,7 @@ class ANNode(Node):
 
     def sensor_callback(self, msg, robot_id):
         """Update the robot's height in (x, y, z) where z is height in scalar field"""
-        self.gradient.robot_positions[self.robot_id_list.index(robot_id)][2] = self.normalize(msg.data, min_val=MIN_SENSOR, max_val=MAX_SENSOR)  # Set min and max based on expected sensor range
+        self.gradient.robot_positions[self.robot_id_list.index(robot_id)][2] = msg.data # Set min and max based on expected sensor range
 
     def normalize(self, val, min_val=0.0, max_val=100.0):
         """Normalize value to a 0-1 scale which greatly improves gradient calculation."""
@@ -270,12 +270,15 @@ class ANNode(Node):
         # For x-direction gain
         comp_x_BC, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
         comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
-        gain_x = self.gradient.mode.direction[0] * (dz_1_to_2 / comp_x_BC + dz_3_to_4 / comp_x_DE) * 1.0
+        gain_x = (dz_1_to_2 / comp_x_BC + dz_3_to_4 / comp_x_DE)
+        vel_x = self.gradient.mode.direction[0] * gain_x * 5.0
 
         # For y-direction gain
         _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
         _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
-        gain_y = self.gradient.mode.direction[1] * (dz_3_to_1 / comp_y_BD + dz_4_to_2 / comp_y_CE) * 1.0
+        gain_y = (dz_3_to_1 / comp_y_BD + dz_4_to_2 / comp_y_CE) 
+        vel_y = self.gradient.mode.direction[1] * gain_y * 5.0
+        auto_cruise = -1 if vel_y < 0 else 1
 
         # For rotational gain (cross-track error)
         gain_cross_track_1 = self._compute_gain_from_Z_and_distance(
@@ -294,13 +297,14 @@ class ANNode(Node):
             Zc=z_robot2,
             ell=1.0
         )
-        gain_angular = self.gradient.mode.direction[2] * (gain_cross_track_1 + gain_cross_track_2) * 10.0
+        gain_angular = (gain_cross_track_1 + gain_cross_track_2)
+        vel_angular = self.gradient.mode.direction[2] * gain_angular * 1000.0
 
         # Create velocity command message
         cmd_vel = Twist()
-        cmd_vel.linear.x = self.clip(gain_x, abs_max=MAX_VEL_CLUSTER)
-        cmd_vel.linear.y = self.clip(gain_y, abs_max=MAX_VEL_CLUSTER)
-        cmd_vel.angular.z = self.clip(gain_angular, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.linear.x = self.clip(vel_x, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.linear.y = self.clip(vel_y, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_CLUSTER)
 
         # Log debug information
         self._log_5_robot_debug_info(
@@ -347,7 +351,7 @@ class ANNode(Node):
         self.get_logger().info(f"adp ctrl {cmd_vel.linear.x}, {cmd_vel.linear.y}, {cmd_vel.angular.z}")
         self.pubsub.publish('/ctrl/cmd_vel', cmd_vel)
     
-    def clip(self, val, abs_max=1.0, gain=100.0):
+    def clip(self, val, abs_max=1.0, gain=1.0):
         return max(min(val*gain, abs_max), -abs_max)
 
     def publish_velocities_manager(self):

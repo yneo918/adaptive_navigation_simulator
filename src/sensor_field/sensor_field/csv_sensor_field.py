@@ -1,5 +1,8 @@
 import csv
+import hashlib
+import json
 import math
+import pickle
 import re
 import struct
 from pathlib import Path
@@ -26,7 +29,7 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('frame_id', 'world')
         self.declare_parameter('pointcloud_topic', 'sensor_field/points')
         self.declare_parameter('fill_pointcloud_topic', 'sensor_field/fill_points')
-        self.declare_parameter('publish_interval', 0.5)
+        self.declare_parameter('publish_interval', 10)
         self.declare_parameter('column_x', 'x')
         self.declare_parameter('column_y', 'y')
         self.declare_parameter('column_z', '')
@@ -42,6 +45,8 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('fill_method', 'idw')
         self.declare_parameter('fill_tps_regularization', 1e-5)
         self.declare_parameter('service_inputs_latlon', False)
+        self.declare_parameter('cache_dir', '.sensor_field_cache')
+        self.declare_parameter('enable_cache', True)
 
         csv_path = self.get_parameter('csv_path').get_parameter_value().string_value
         if not csv_path:
@@ -84,6 +89,8 @@ class CsvSensorFieldPublisher(Node):
         fill_tps_regularization = (
             self.get_parameter('fill_tps_regularization').get_parameter_value().double_value
         )
+        cache_dir = self.get_parameter('cache_dir').get_parameter_value().string_value
+        enable_cache = self.get_parameter('enable_cache').get_parameter_value().bool_value
 
         if fill_spacing <= 0.0:
             raise ValueError('Parameter "fill_spacing" must be positive.')
@@ -103,15 +110,53 @@ class CsvSensorFieldPublisher(Node):
         if (fill_min is None) ^ (fill_max is None):
             raise ValueError('Both "fill_rect_min" and "fill_rect_max" must be provided together.')
 
-        points, values, dimension, latlon_meta = self._load_csv(
-            Path(csv_path),
-            column_x,
-            column_y,
-            column_z,
-            column_data,
-            interpret_latlon,
-            distance_scale,
-        )
+        # Build cache configuration
+        cache_config = {
+            'csv_path': csv_path,
+            'column_x': column_x,
+            'column_y': column_y,
+            'column_z': column_z,
+            'column_data': column_data,
+            'interpret_latlon': interpret_latlon,
+            'distance_scale': distance_scale,
+            'fill_rect_min': fill_rect_min_param,
+            'fill_rect_max': fill_rect_max_param,
+            'fill_spacing': fill_spacing,
+            'fill_radius': fill_radius,
+            'fill_neighbor_count': fill_neighbor_count,
+            'fill_weight_power': fill_weight_power,
+            'fill_method': fill_method,
+            'fill_tps_regularization': fill_tps_regularization,
+        }
+
+        # Try loading from cache
+        cache_loaded = False
+        if enable_cache:
+            cached_data = self._load_from_cache(cache_dir, cache_config)
+            if cached_data is not None:
+                points = cached_data['points']
+                values = cached_data['values']
+                dimension = cached_data['dimension']
+                latlon_meta = cached_data['latlon_meta']
+                base_points = cached_data['base_points']
+                base_values = cached_data['base_values']
+                fill_points = cached_data['fill_points']
+                fill_values = cached_data['fill_values']
+                tps_models = cached_data.get('tps_models', [])
+                tps_tail_models = cached_data.get('tps_tail_models', [])
+                cache_loaded = True
+                self.get_logger().info('Loaded sensor field from cache.')
+
+        if not cache_loaded:
+            points, values, dimension, latlon_meta = self._load_csv(
+                Path(csv_path),
+                column_x,
+                column_y,
+                column_z,
+                column_data,
+                interpret_latlon,
+                distance_scale,
+            )
         self.dimension = dimension
         self.interpolation_radius = float(fill_radius)
         self.fill_neighbor_count = int(fill_neighbor_count)
@@ -119,24 +164,47 @@ class CsvSensorFieldPublisher(Node):
         self.fill_method = fill_method
         self.fill_tps_regularization = float(fill_tps_regularization)
 
-        self.source_points = points.copy()
-        self.source_values = values.copy()
-        self._tps_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
-        self._tps_tail_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
-        self._tps_ready = False
+        if not cache_loaded:
+            self.source_points = points.copy()
+            self.source_values = values.copy()
+            self._tps_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+            self._tps_tail_models: list[Tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+            self._tps_ready = False
 
-        if self.fill_method == 'thin_plate':
-            self._prepare_tps_models(self.source_points, self.source_values)
+            if self.fill_method == 'thin_plate':
+                self._prepare_tps_models(self.source_points, self.source_values)
 
-        base_points, base_values, fill_points, fill_values = self._augment_with_grid(
-            self.source_points,
-            self.source_values,
-            self.dimension,
-            fill_min,
-            fill_max,
-            float(fill_spacing),
-            float(fill_radius),
-        )
+            base_points, base_values, fill_points, fill_values = self._augment_with_grid(
+                self.source_points,
+                self.source_values,
+                self.dimension,
+                fill_min,
+                fill_max,
+                float(fill_spacing),
+                float(fill_radius),
+            )
+
+            # Save to cache
+            if enable_cache:
+                cache_data = {
+                    'points': points,
+                    'values': values,
+                    'dimension': dimension,
+                    'latlon_meta': latlon_meta,
+                    'base_points': base_points,
+                    'base_values': base_values,
+                    'fill_points': fill_points,
+                    'fill_values': fill_values,
+                    'tps_models': self._tps_models,
+                    'tps_tail_models': self._tps_tail_models,
+                }
+                self._save_to_cache(cache_dir, cache_config, cache_data)
+        else:
+            self.source_points = points.copy()
+            self.source_values = values.copy()
+            self._tps_models = tps_models
+            self._tps_tail_models = tps_tail_models
+            self._tps_ready = len(tps_models) > 0
         self.frame_id = frame_id
         self.points = base_points
         self.values = base_values
@@ -391,6 +459,69 @@ class CsvSensorFieldPublisher(Node):
         if self.service_inputs_latlon:
             return self._to_internal_coordinates(coords)
         return coords
+
+    def _compute_cache_hash(self, cache_config: Dict) -> str:
+        """Compute hash for cache configuration including CSV file content."""
+        hasher = hashlib.sha256()
+
+        # Hash CSV file content
+        csv_path = Path(cache_config['csv_path'])
+        if csv_path.exists():
+            with csv_path.open('rb') as f:
+                hasher.update(f.read())
+
+        # Hash configuration parameters (sorted for consistency)
+        config_str = json.dumps(cache_config, sort_keys=True)
+        hasher.update(config_str.encode('utf-8'))
+
+        return hasher.hexdigest()
+
+    def _get_cache_path(self, cache_dir: str, cache_hash: str) -> Path:
+        """Get cache file path."""
+        cache_path = Path(cache_dir)
+        cache_path.mkdir(parents=True, exist_ok=True)
+        return cache_path / f'{cache_hash}.pkl'
+
+    def _load_from_cache(self, cache_dir: str, cache_config: Dict) -> Optional[Dict]:
+        """Load cached data if available and valid."""
+        try:
+            cache_hash = self._compute_cache_hash(cache_config)
+            cache_file = self._get_cache_path(cache_dir, cache_hash)
+
+            if not cache_file.exists():
+                return None
+
+            with cache_file.open('rb') as f:
+                cached = pickle.load(f)
+
+            # Verify cache hash matches
+            if cached.get('cache_hash') != cache_hash:
+                self.get_logger().warning('Cache hash mismatch, regenerating...')
+                return None
+
+            return cached.get('data')
+        except Exception as e:
+            self.get_logger().warning(f'Failed to load cache: {e}')
+            return None
+
+    def _save_to_cache(self, cache_dir: str, cache_config: Dict, data: Dict) -> None:
+        """Save data to cache file."""
+        try:
+            cache_hash = self._compute_cache_hash(cache_config)
+            cache_file = self._get_cache_path(cache_dir, cache_hash)
+
+            cache_payload = {
+                'cache_hash': cache_hash,
+                'config': cache_config,
+                'data': data,
+            }
+
+            with cache_file.open('wb') as f:
+                pickle.dump(cache_payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+            self.get_logger().info(f'Saved sensor field to cache: {cache_file}')
+        except Exception as e:
+            self.get_logger().warning(f'Failed to save cache: {e}')
 
     @staticmethod
     def _parse_rect_corner(raw: str) -> Optional[Tuple[float, float]]:

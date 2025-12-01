@@ -28,6 +28,7 @@ setup(
             'sensor_field_pose2d = sensor_field.sensor_field_pose2d:main',
             'sample_2d = sensor_field.sample_2d:main',
             'topography_2d = sensor_field.topography_2d:main',
+            'paper_field = sensor_field.paper_field:main',
         ],
     },
 )
