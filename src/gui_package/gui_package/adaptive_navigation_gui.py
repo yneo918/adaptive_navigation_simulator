@@ -2,6 +2,8 @@
 
 import sys
 import math
+import numpy as np
+import sympy as sp
 import rclpy
 from rclpy.node import Node
 from PyQt6.QtWidgets import QApplication, QVBoxLayout, QLabel, QDoubleSpinBox
@@ -18,6 +20,7 @@ from .constants import (
 )
 from .my_ros_module import PubSubManager
 from adaptive_nav.ScalarGradient import ControlMode
+from cluster_node.Cluster import PentagonLeaderConfig
 
 
 class AdaptiveNavigationGUI(Node):    
@@ -47,9 +50,10 @@ class AdaptiveNavigationGUI(Node):
         self.cluster_b5: float = 0.0
 
         self.pubsub = PubSubManager(self)
-        
+
         self._setup_publishers()
         self._setup_subscriptions()
+        self._init_inverse_kinematics()
         timer_period = 0.1  # 10Hz
         self.timer = self.create_timer(timer_period, self.timer_callback)
         
@@ -76,9 +80,16 @@ class AdaptiveNavigationGUI(Node):
             ClusterInfo, '/ctrl/cluster_info', 
             self.cluster_info_callback, DEFAULT_QOS)
         self.pubsub.create_subscription(
-            Pose2D, 'rviz/pose2D', 
+            Pose2D, '/rviz/pose2D',
             self._rviz_pose_callback, 10)
-            
+
+    def _init_inverse_kinematics(self):
+        """Initialize inverse kinematics function from PentagonLeaderConfig."""
+        config = PentagonLeaderConfig()
+        _, ikine, _, _, _ = config.setup_kinematics()
+        c_symbols = sp.symbols('c0:15')
+        self._ikine_func = sp.lambdify(c_symbols, ikine, 'numpy')
+
     def cluster_info_callback(self, msg: ClusterInfo) -> None:
         """Handle cluster info updates."""
         try:
@@ -139,12 +150,28 @@ class AdaptiveNavigationGUI(Node):
             self.cluster_t = msg.data[2]
     
     def _rviz_pose_callback(self, msg: Pose2D) -> None:
-        for i in range(1, self.n_rover + 1):
+        """Convert cluster pose to individual robot poses using inverse kinematics."""
+        x_c, y_c, theta_c = msg.x, msg.y, msg.theta
+
+        # Cluster state vector (15 elements)
+        # [x_c, y_c, theta_c, phi1-5, d1-4, beta3-5]
+        c_state = [
+            x_c, y_c, theta_c,
+            0.0, 0.0, 0.0, 0.0, 0.0,  # phi1-5
+            self.cluster_d2, self.cluster_d3, self.cluster_d4, self.cluster_d5,
+            self.cluster_b3, self.cluster_b4, self.cluster_b5
+        ]
+
+        # Compute robot positions via inverse kinematics
+        robot_positions = np.array(self._ikine_func(*c_state)).flatten()
+
+        # Publish to each rover
+        for i in range(self.n_rover):
             pose_msg = Pose2D()
-            pose_msg.x = msg.x
-            pose_msg.y = msg.y
-            pose_msg.theta = msg.theta
-            self.pubsub.publish(f'/p{i}/set_pose2D', pose_msg)
+            pose_msg.x = float(robot_positions[i * 3])
+            pose_msg.y = float(robot_positions[i * 3 + 1])
+            pose_msg.theta = float(robot_positions[i * 3 + 2])
+            self.pubsub.publish(f'/p{i + 1}/set_pose2D', pose_msg)
 
 
 
