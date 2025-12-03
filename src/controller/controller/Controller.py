@@ -62,6 +62,7 @@ class Controller(Node):
                 ('cluster_params', [8.0, 8.0, 1.047]), 
                 ('cluster_type', "TriangleatCentroid"),
                 ('control_mode', "POS"),
+                ('vel_dof', 3),
             ]
         )
         self.prefix = ''
@@ -73,6 +74,7 @@ class Controller(Node):
         # Parse and validate robot IDs
         robot_id_list = self.get_parameter('robot_id_list').value
         self._setup_robot_lists(robot_id_list)
+        self.vel_dof = self.get_parameter('vel_dof').value
         
         # Validate cluster parameters
         self.cluster_params = self.get_parameter('cluster_params').value
@@ -461,19 +463,27 @@ class Controller(Node):
             current_theta = robot_positions[i * ROVER_DOF + 2, 0]
             
             self.get_logger().info(f"p{i+1}")
-            linear_cmd, angular_cmd = self._compute_robot_command(
-                x_vel, y_vel, current_theta
-            )
-            rover_commands.append([linear_cmd, angular_cmd])
+            if self.vel_dof == 2:
+                linear_cmd, angular_cmd = self._compute_robot_command(
+                    x_vel, y_vel, current_theta
+                )
+                rover_commands.append([linear_cmd, angular_cmd])
+            elif self.vel_dof == 3:
+                t_vel = float(rdot_des[i * ROVER_DOF + 2, 0])
+                rover_commands.append([x_vel, y_vel, t_vel])
         
         # Limit velocities based on physical constraints
-        rover_commands = self._apply_velocity_limits(rover_commands)
+        if self.vel_dof == 2:
+            rover_commands = self._apply_velocity_limits(rover_commands)
         
         # Publish robot velocity commands
         for i, robot_id in enumerate(cluster_robots):
             vel_msg = Twist()
             vel_msg.linear.x = rover_commands[i][0]
             vel_msg.angular.z = rover_commands[i][1]
+            if self.vel_dof == 3:
+                vel_msg.linear.y = rover_commands[i][1]
+                vel_msg.angular.z = 0.0
             
             try:
                 topic = f"{self.prefix}/{robot_id}/cmd_vel"
