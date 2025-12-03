@@ -304,17 +304,9 @@ class ANNode(Node):
         dz_left_normalized = dz_4_to_2 / abs(comp_y_CE)   # p5-p3方向
         dz_right_normalized = dz_3_to_1 / abs(comp_y_BD)  # p4-p2方向
 
-        gain_angular_tilt = dz_right_normalized - dz_left_normalized
-        # 方向補正（勾配方向を前に向ける）
-        # direction[1]の符号でUP/DOWNを判定
-        gain_angular_direction = self.gradient.mode.direction[1] * gain_x
+        gain_angular = (dz_right_normalized - dz_left_normalized) * self.gradient.mode.direction[2]
 
-        # 統合（重み付けはチューニング）
-        K_TILT = 4.0
-        K_DIR = 1.0
-        gain_angular = K_TILT * gain_angular_tilt + K_DIR * gain_angular_direction
-
-        vel_angular = gain_angular * 100.0
+        vel_angular = gain_angular * 40.0
 
         # Create velocity command message
         cmd_vel = Twist()
@@ -347,7 +339,7 @@ class ANNode(Node):
         self.get_logger().info(f"d4 {dz_3_to_4}")
         self.get_logger().info(f"x {self.gradient.mode.direction[0]}*{dz_1_to_2+dz_3_to_4} = {gain_x}")
         self.get_logger().info(f"y {self.gradient.mode.direction[1]}*{dz_3_to_1+dz_4_to_2} = {gain_y}")
-        self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz_1_to_2-dz_3_to_4} = {gain_angular}")
+        self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz_4_to_2-dz_3_to_1} = {gain_angular}")
         self.get_logger().info(f"adp {self.gradient.mode.value}")
 
     def publish_velocities(self):

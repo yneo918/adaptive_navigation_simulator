@@ -49,10 +49,10 @@ class ControlMode(Enum):
     CONTOUR_CCW = ("contour following counter-clockwise", math.pi, 0.0, None, 3)
     CROSSTRACK_CW = ("crosstrack_cw_controller", math.pi, math.pi, None, 3)
     CROSSTRACK_CCW = ("crosstrack_ccw_controller", 0.0, math.pi, None, 3)
-    RIDGE_UP = ("ridge up", 0.0, 0.0, [1.0, 1.0, 1.0], 5)
+    RIDGE_UP = ("ridge up", 0.0, 0.0, [1.0, 1.0, -1.0], 5)
     RIDGE_DOWN = ("ridge down", 0.0, 0.0, [1.0, -1.0, -1.0], 5)
     TRENCH_UP = ("trench up", 0.0, 0.0, [-1.0, 1.0, 1.0] , 5)
-    TRENCH_DOWN = ("trench down", 0.0, 0.0, [-1.0, -1.0, -1.0] , 5)
+    TRENCH_DOWN = ("trench down", 0.0, 0.0, [-1.0, -1.0, 1.0] , 5)
 
     def __init__(self, value: str, bearing_offset: float, gain: Optional[float], direction: Optional[List[float]], num_robots: int):
         self._value_ = value
