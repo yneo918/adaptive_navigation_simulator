@@ -29,6 +29,7 @@ setup(
             'sample_2d = sensor_field.sample_2d:main',
             'topography_2d = sensor_field.topography_2d:main',
             'paper_field = sensor_field.paper_field:main',
+            'trajectory_plotter_3d = sensor_field.trajectory_plotter_3d:main',
         ],
     },
 )
