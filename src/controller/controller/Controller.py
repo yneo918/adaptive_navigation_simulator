@@ -62,7 +62,7 @@ class Controller(Node):
                 ('cluster_params', [8.0, 8.0, 1.047]), 
                 ('cluster_type', "TriangleatCentroid"),
                 ('control_mode', "POS"),
-                ('vel_dof', 3),
+                ('vel_dof', 2),
             ]
         )
         self.prefix = ''
@@ -488,10 +488,16 @@ class Controller(Node):
             try:
                 topic = f"{self.prefix}/{robot_id}/cmd_vel"
                 self.pubsub.publish(topic, vel_msg)
-                self.get_logger().info(
-                    f"Robot {i} velocity[{topic}]: "
-                    f"linear={vel_msg.linear.x:.3f}, angular={vel_msg.angular.z:.3f}"
-                )
+                if self.vel_dof == 2:
+                    self.get_logger().info(
+                        f"Robot {i} velocity[{topic}]: "
+                        f"linear={vel_msg.linear.x:.3f}, angular={vel_msg.angular.z:.3f}"
+                    )
+                elif self.vel_dof == 3:
+                    self.get_logger().info(
+                        f"Robot {i} velocity[{topic}]: "
+                        f"x={vel_msg.linear.x:.3f}, y={vel_msg.linear.y:.3f}, angular={vel_msg.angular.z:.3f}"
+                    )
             except Exception as e:
                 self.get_logger().error(f"Failed to publish velocity command: {e}")
 

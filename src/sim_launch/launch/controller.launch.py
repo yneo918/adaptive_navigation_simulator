@@ -21,13 +21,21 @@ def generate_launch_description():
             default_value=cluster_file,
             description='Path to cluster configuration file'
         ),
+        DeclareLaunchArgument(
+            'vel_dof',
+            default_value='2',
+            description='Velocity degrees of freedom (2 or 3)'
+        ),
 
         # Cluster controller node
         Node(
             package='controller',
             executable='cluster_controller',
             name='cluster_feedback',
-            parameters=[LaunchConfiguration('cluster_config')],
+            parameters=[
+                LaunchConfiguration('cluster_config'),
+                {'vel_dof': LaunchConfiguration('vel_dof')}
+            ],
         ),
 
         # Adaptive navigation node
@@ -35,6 +43,9 @@ def generate_launch_description():
             package='adaptive_nav',
             executable='adaptive_nav',
             name='cluster_feedback',
-            parameters=[LaunchConfiguration('cluster_config')],
+            parameters=[
+                LaunchConfiguration('cluster_config'),
+                {'vel_dof': LaunchConfiguration('vel_dof')}
+            ],
         ),
     ])

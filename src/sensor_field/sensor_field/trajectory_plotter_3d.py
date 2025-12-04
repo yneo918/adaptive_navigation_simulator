@@ -11,13 +11,22 @@ Creates a matplotlib 3D plot showing:
 """
 
 import struct
+import sys
 from collections import defaultdict
 from typing import Dict, List, Tuple
+
+# Fix mpl_toolkits namespace package conflict between system and user installations
+# Must be done before importing matplotlib/mpl_toolkits
+_user_site = '/home/neo/.local/lib/python3.10/site-packages'
+sys.path.insert(0, _user_site)
+# Clear any cached matplotlib/mpl_toolkits imports to ensure user packages take precedence
+for _mod in [k for k in list(sys.modules.keys()) if 'mpl_toolkits' in k or 'matplotlib' in k]:
+    del sys.modules[_mod]
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - registers '3d' projection
 from scipy.interpolate import griddata
 
 import rclpy
@@ -36,16 +45,17 @@ class TrajectoryPlotter3D(Node):
 
         # Parameters
         self.declare_parameter('num_robots', 5)
-        self.declare_parameter('robot_prefix', '/sim')
-        self.declare_parameter('robot_ids', ['p0', 'p1', 'p2', 'p3', 'p4'])
+        self.declare_parameter('robot_prefix', '')
+        self.declare_parameter('robot_ids', ['p1', 'p2', 'p3', 'p4', 'p5'])
         self.declare_parameter('trajectory_sample_interval', 0.5)  # seconds
         self.declare_parameter('output_file', 'trajectory_3d.png')
         self.declare_parameter('dpi', 150)
         self.declare_parameter('elevation_scale', 1.0)  # Scale factor for Z axis
         self.declare_parameter('terrain_alpha', 0.7)
         self.declare_parameter('line_width', 2.0)
-        self.declare_parameter('marker_size', 30)
+        self.declare_parameter('marker_size', 10)
         self.declare_parameter('marker_interval', 10)  # Plot marker every N points
+        self.declare_parameter('trajectory_z_offset', 2.0)  # Z offset to lift trajectory above terrain
 
         # Get parameters
         self.num_robots = self.get_parameter('num_robots').value
@@ -59,6 +69,7 @@ class TrajectoryPlotter3D(Node):
         self.line_width = self.get_parameter('line_width').value
         self.marker_size = self.get_parameter('marker_size').value
         self.marker_interval = self.get_parameter('marker_interval').value
+        self.trajectory_z_offset = self.get_parameter('trajectory_z_offset').value
 
         # Terrain data storage
         self.terrain_points: np.ndarray = None
@@ -142,16 +153,36 @@ class TrajectoryPlotter3D(Node):
         nearest_idx = np.argmin(distances)
         return self.terrain_elevations[nearest_idx]
 
+    def save_data(self, filepath: str = 'trajectory_data.npz') -> None:
+        """Save terrain and trajectory data to file for later viewing."""
+        np.savez(
+            filepath,
+            terrain_points=self.terrain_points,
+            terrain_elevations=self.terrain_elevations,
+            trajectories={k: np.array(v) for k, v in self.trajectories.items()},
+            robot_ids=self.robot_ids[:self.num_robots],
+            elevation_scale=self.elevation_scale,
+            terrain_alpha=self.terrain_alpha,
+            line_width=self.line_width,
+            marker_size=self.marker_size,
+            marker_interval=self.marker_interval,
+            trajectory_z_offset=self.trajectory_z_offset,
+        )
+        print(f'[INFO] Data saved to {filepath}')
+
     def generate_plot(self) -> None:
         """Generate the 3D plot with terrain and trajectories."""
         if not self.terrain_received:
-            self.get_logger().warn('No terrain data received. Cannot generate plot.')
+            print('[WARN] No terrain data received. Cannot generate plot.')
             return
 
         if all(len(traj) == 0 for traj in self.trajectories.values()):
-            self.get_logger().warn('No trajectory data recorded. Generating terrain only.')
+            print('[WARN] No trajectory data recorded. Generating terrain only.')
 
-        self.get_logger().info('Generating 3D plot...')
+        # Save data for later viewing
+        self.save_data()
+
+        print('[INFO] Generating 3D plot...')
 
         # Create figure
         fig = plt.figure(figsize=(14, 10))
@@ -179,9 +210,9 @@ class TrajectoryPlotter3D(Node):
         # Save plot
         plt.tight_layout()
         plt.savefig(self.output_file, dpi=self.dpi, bbox_inches='tight')
-        self.get_logger().info(f'Plot saved to {self.output_file}')
+        print(f'[INFO] Plot saved to {self.output_file}')
 
-        # Also display
+        # Display plot (blocking - user closes window to exit)
         plt.show()
 
     def _plot_terrain_surface(self, ax: Axes3D) -> None:
@@ -236,7 +267,7 @@ class TrajectoryPlotter3D(Node):
             ys = [p[1] for p in trajectory]
 
             # Get z (elevation) for each point on trajectory
-            zs = [self._get_elevation_at(x, y) * self.elevation_scale + 0.5
+            zs = [self._get_elevation_at(x, y) * self.elevation_scale + self.trajectory_z_offset
                   for x, y in zip(xs, ys)]
 
             # Plot trajectory line
@@ -276,7 +307,7 @@ class TrajectoryPlotter3D(Node):
                           linewidths=1,
                           zorder=10)
 
-            self.get_logger().info(f'Plotted {len(trajectory)} points for {robot_id}')
+            print(f'[INFO] Plotted {len(trajectory)} points for {robot_id}')
 
 
 def main(args=None) -> None:
@@ -286,11 +317,18 @@ def main(args=None) -> None:
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info('Generating plot before shutdown...')
-        node.generate_plot()
-    finally:
-        node.destroy_node()
+        pass
+
+    # Generate plot after spin ends
+    print('[INFO] Generating plot...')
+    node.generate_plot()
+    print('[INFO] To reopen: ros2 run sensor_field trajectory_viewer')
+
+    node.destroy_node()
+    try:
         rclpy.shutdown()
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':

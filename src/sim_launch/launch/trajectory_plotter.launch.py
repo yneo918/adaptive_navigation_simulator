@@ -23,7 +23,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'robot_prefix',
-            default_value='/sim',
+            default_value='',
             description='Prefix for robot topics'
         ),
         DeclareLaunchArgument(
@@ -60,7 +60,7 @@ def generate_launch_description():
             parameters=[{
                 'num_robots': LaunchConfiguration('num_robots'),
                 'robot_prefix': LaunchConfiguration('robot_prefix'),
-                'robot_ids': ['p0', 'p1', 'p2', 'p3', 'p4'],
+                'robot_ids': ['p1', 'p2', 'p3', 'p4', 'p5'],
                 'output_file': LaunchConfiguration('output_file'),
                 'dpi': LaunchConfiguration('dpi'),
                 'elevation_scale': LaunchConfiguration('elevation_scale'),

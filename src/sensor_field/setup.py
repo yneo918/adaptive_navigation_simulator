@@ -30,6 +30,7 @@ setup(
             'topography_2d = sensor_field.topography_2d:main',
             'paper_field = sensor_field.paper_field:main',
             'trajectory_plotter_3d = sensor_field.trajectory_plotter_3d:main',
+            'trajectory_viewer = sensor_field.trajectory_viewer:main',
         ],
     },
 )

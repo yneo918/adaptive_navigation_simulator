@@ -61,10 +61,16 @@ def generate_launch_description():
             default_value='false',
             description='Toggle hardware launch instead of simulation components'
         ),
+        DeclareLaunchArgument(
+            'vel_dof',
+            default_value='3',
+            description='Velocity degrees of freedom (2 or 3)'
+        ),
 
         # Controller component
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(controller_launch),
+            launch_arguments={'vel_dof': LaunchConfiguration('vel_dof')}.items(),
             condition=IfCondition(LaunchConfiguration('enable_controller'))
         ),
 

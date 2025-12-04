@@ -41,10 +41,10 @@ class AdaptiveNavigationGUI(Node):
         self.cluster_t: float = 0.0
         
         # 5-robot cluster specific parameters
-        self.cluster_d2: float = 3.0
-        self.cluster_d3: float = 3.0
-        self.cluster_d4: float = 3.0
-        self.cluster_d5: float = 3.0
+        self.cluster_d2: float = 5.0
+        self.cluster_d3: float = 5.0
+        self.cluster_d4: float = 5.0
+        self.cluster_d5: float = 5.0
         self.cluster_b3: float = 0.0
         self.cluster_b4: float = 0.0
         self.cluster_b5: float = 0.0

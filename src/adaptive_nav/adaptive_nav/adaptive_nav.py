@@ -270,13 +270,13 @@ class ANNode(Node):
         # For x-direction gain
         comp_x_BC, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
         comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
-        gain_x = (dz_1_to_2 / abs(comp_x_BC) + dz_3_to_4 / abs(comp_x_DE))
+        gain_x = (dz_1_to_2 / -(comp_x_BC) + dz_3_to_4 / -(comp_x_DE))
         vel_x = self.gradient.mode.direction[0] * gain_x * 5.0
 
         # For y-direction gain
         _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
         _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
-        gain_y = (dz_3_to_1 / abs(comp_y_BD) + dz_4_to_2 / abs(comp_y_CE))
+        gain_y = (dz_3_to_1 / (comp_y_BD) + dz_4_to_2 / (comp_y_CE))
         vel_y = self.gradient.mode.direction[1] * gain_y * 5.0
         auto_cruise = -1 if vel_y < 0 else 1
 
@@ -301,8 +301,8 @@ class ANNode(Node):
         gain_angular = (gain_cross_track_1 + gain_cross_track_2)
         vel_angular = self.gradient.mode.direction[2] * gain_angular * 10.0
         '''
-        dz_left_normalized = dz_4_to_2 / abs(comp_y_CE)   # p5-p3方向
-        dz_right_normalized = dz_3_to_1 / abs(comp_y_BD)  # p4-p2方向
+        dz_left_normalized = dz_4_to_2 / (comp_y_CE)   # p5-p3方向
+        dz_right_normalized = dz_3_to_1 / (comp_y_BD)  # p4-p2方向
 
         gain_angular = (dz_right_normalized - dz_left_normalized) * self.gradient.mode.direction[2]
 
