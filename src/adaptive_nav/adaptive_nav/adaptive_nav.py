@@ -23,6 +23,7 @@ MAX_SENSOR = 100.0  # Max expected sensor value in dBm
 MIN_SENSOR = 0.0  # Min expected sensor value in dBm
 DESIRED_SENSOR = 40.0  # Desired sensor value in dBm for cross-track controller
 MAX_VEL_CLUSTER = 2.0
+MAX_VEL_ROT_CLUSTER = 1.0
 
 class ANNode(Node):
     def __init__(self):
@@ -31,7 +32,7 @@ class ANNode(Node):
             namespace='',
             parameters=[
                 ('robot_id_list', ["p1", "p2", "p3", "p4", "p5"]),
-                ('sensor_msg_name', "sensor")
+                ('sensor_msg_name', "sensor"),
             ]
         )
         params = self._parameters
@@ -40,6 +41,7 @@ class ANNode(Node):
         self.sensor_name = self.get_parameter('sensor_msg_name').value
 
         self.num_robots = len(self.robot_id_list)
+        self.goal = None
 
         self.pubsub = PubSubManager(self)
         self.set_pubsub()
@@ -59,6 +61,7 @@ class ANNode(Node):
         self.pubsub.create_publisher(Twist, '/ctrl/cmd_vel', 5) #publish to cluster
         self.pubsub.create_subscription(String, '/ctrl/adaptive_mode', self.update_adaptive_mode, 1)
         self.pubsub.create_subscription(String, '/ctrl/cluster_mode', self._mode_callback, 1)
+        self.pubsub.create_subscription(Pose2D, '/rviz/goal_pose2D', self._goal_callback, 10)
         for robot_id in self.robot_id_list:
             self.pubsub.create_subscription(
                 Pose2D,
@@ -102,6 +105,10 @@ class ANNode(Node):
             self.enable = True
         else:
             self.enable = False
+    
+    def _goal_callback(self, msg: Pose2D):
+        self.goal = [msg.x, msg.y, msg.theta]
+        self.get_logger().info(f"Get Goal Pose {self.goal}")
 
     def _compute_gain_from_Z_and_distance(self, A, B, C, Zb, Zc, ell, eps=1e-12,
                                           clamp_segment=False, epsilon_out=0.0):
@@ -268,17 +275,16 @@ class ANNode(Node):
 
         # Decompose vectors to compute gain components
         # For x-direction gain
-        comp_x_BC, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
+        comp_x_BC, _, _, _, y_unit = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
         comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
         gain_x = (dz_1_to_2 / -(comp_x_BC) + dz_3_to_4 / -(comp_x_DE))
-        vel_x = self.gradient.mode.direction[0] * gain_x * 5.0
+        vel_x = self.gradient.mode.direction[0] * gain_x
 
         # For y-direction gain
         _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
         _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
         gain_y = (dz_3_to_1 / (comp_y_BD) + dz_4_to_2 / (comp_y_CE))
-        vel_y = self.gradient.mode.direction[1] * gain_y * 5.0
-        auto_cruise = -1 if vel_y < 0 else 1
+        vel_y = self.gradient.mode.direction[1] * gain_y
 
         '''
         # For rotational gain (cross-track error)
@@ -306,13 +312,24 @@ class ANNode(Node):
 
         gain_angular = (dz_right_normalized - dz_left_normalized) * self.gradient.mode.direction[2]
 
-        vel_angular = gain_angular * 40.0
+        vel_angular = gain_angular * 10.0
 
         # Create velocity command message
         cmd_vel = Twist()
-        cmd_vel.linear.x = self.clip(vel_x, abs_max=MAX_VEL_CLUSTER)
-        cmd_vel.linear.y = self.clip(vel_y, abs_max=MAX_VEL_CLUSTER)
-        cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_CLUSTER)
+        if False:
+            cmd_vel.linear.x = self.clip(vel_x, abs_max=MAX_VEL_CLUSTER)
+            cmd_vel.linear.y = self.clip(vel_y, abs_max=MAX_VEL_CLUSTER)
+        cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_ROT_CLUSTER)
+
+        _x = abs(vel_x)
+        _y = abs(vel_y)
+        
+        if _x + _y != 0:
+            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x / (_x + _y)
+            cmd_vel.linear.y = MAX_VEL_CLUSTER * vel_y / (_x + _y)
+        else:
+            cmd_vel.linear.x = 0.0
+            cmd_vel.linear.y = 0.0
 
         # Log debug information
         self._log_5_robot_debug_info(

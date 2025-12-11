@@ -46,6 +46,11 @@ def generate_launch_description():
             executable='initial_pose_forwarder',
             condition=IfCondition(LaunchConfiguration('enable_gui')),
         ),
+        Node(
+            package='controller',
+            executable='goal_pose_forwarder',
+            condition=IfCondition(LaunchConfiguration('enable_gui')),
+        ),
 
         # RViz visualization
         IncludeLaunchDescription(

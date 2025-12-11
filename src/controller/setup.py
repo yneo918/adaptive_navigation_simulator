@@ -23,6 +23,7 @@ setup(
             "heading_controller = controller.heading_controller:main",
             "cluster_controller = controller.cluster_controller:main",
             "initial_pose_forwarder = controller.initial_pose_forwarder:main",
+            "goal_pose_forwarder = controller.goal_pose_forwarder:main",
         ],
     },
 )

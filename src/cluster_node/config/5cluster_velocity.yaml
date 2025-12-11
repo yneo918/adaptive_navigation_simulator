@@ -3,5 +3,5 @@ cluster_feedback:
     robot_id_list: ["p1", "p2", "p3", "p4", "p5"]
     cluster_size: 5 #number of robots to use
     cluster_type: "PentagonatLeader"
-    cluster_params: [5.0,5.0,5.0,5.0,0.0,0.0,0.0]
+    cluster_params: [10.0,10.0,10.0,10.0,0.0,0.0,0.0]
     control_mode: "VEL"  

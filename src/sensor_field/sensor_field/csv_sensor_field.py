@@ -35,6 +35,8 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('column_z', '')
         self.declare_parameter('column_data', 'a')
         self.declare_parameter('interpret_latlon', False)
+        self.declare_parameter('origin_latitude', float('nan'))
+        self.declare_parameter('origin_longitude', float('nan'))
         self.declare_parameter('distance_scale', 1.0)
         self.declare_parameter('fill_rect_min', '')
         self.declare_parameter('fill_rect_max', '')
@@ -45,6 +47,7 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('fill_method', 'idw')
         self.declare_parameter('fill_tps_regularization', 1e-5)
         self.declare_parameter('service_inputs_latlon', False)
+        self.declare_parameter('clip_points_to_fill_rect', False)
         self.declare_parameter('cache_dir', '.sensor_field_cache')
         self.declare_parameter('enable_cache', True)
 
@@ -70,6 +73,8 @@ class CsvSensorFieldPublisher(Node):
         column_z = column_z_param if column_z_param else None
 
         interpret_latlon = self.get_parameter('interpret_latlon').get_parameter_value().bool_value
+        origin_latitude = self.get_parameter('origin_latitude').get_parameter_value().double_value
+        origin_longitude = self.get_parameter('origin_longitude').get_parameter_value().double_value
         service_inputs_latlon = (
             self.get_parameter('service_inputs_latlon').get_parameter_value().bool_value
         )
@@ -88,6 +93,9 @@ class CsvSensorFieldPublisher(Node):
         fill_method = self.get_parameter('fill_method').get_parameter_value().string_value or 'idw'
         fill_tps_regularization = (
             self.get_parameter('fill_tps_regularization').get_parameter_value().double_value
+        )
+        clip_points_to_fill_rect = (
+            self.get_parameter('clip_points_to_fill_rect').get_parameter_value().bool_value
         )
         cache_dir = self.get_parameter('cache_dir').get_parameter_value().string_value
         enable_cache = self.get_parameter('enable_cache').get_parameter_value().bool_value
@@ -118,6 +126,8 @@ class CsvSensorFieldPublisher(Node):
             'column_z': column_z,
             'column_data': column_data,
             'interpret_latlon': interpret_latlon,
+            'origin_latitude': origin_latitude,
+            'origin_longitude': origin_longitude,
             'distance_scale': distance_scale,
             'fill_rect_min': fill_rect_min_param,
             'fill_rect_max': fill_rect_max_param,
@@ -127,6 +137,7 @@ class CsvSensorFieldPublisher(Node):
             'fill_weight_power': fill_weight_power,
             'fill_method': fill_method,
             'fill_tps_regularization': fill_tps_regularization,
+            'clip_points_to_fill_rect': clip_points_to_fill_rect,
         }
 
         # Try loading from cache
@@ -155,6 +166,8 @@ class CsvSensorFieldPublisher(Node):
                 column_z,
                 column_data,
                 interpret_latlon,
+                origin_latitude,
+                origin_longitude,
                 distance_scale,
             )
         self.dimension = dimension
@@ -221,8 +234,17 @@ class CsvSensorFieldPublisher(Node):
             for point, value in zip(all_points, all_values)
         }
 
+        # Clip base points to fill_rect if enabled
+        publish_points = self.points
+        publish_values = self.values
+        clipped_count = 0
+        if clip_points_to_fill_rect and fill_min is not None and fill_max is not None:
+            publish_points, publish_values, clipped_count = self._clip_points_to_rect(
+                self.points, self.values, fill_min, fill_max
+            )
+
         self.point_step = struct.calcsize('ffff')
-        self.base_pointcloud_msg = self._create_pointcloud_message(self.points, self.values)
+        self.base_pointcloud_msg = self._create_pointcloud_message(publish_points, publish_values)
         self.fill_pointcloud_msg = (
             self._create_pointcloud_message(self.fill_points, self.fill_values)
             if self.fill_points.size > 0
@@ -258,6 +280,9 @@ class CsvSensorFieldPublisher(Node):
         if self.grid_points_added:
             message += f' (+{self.grid_points_added} interpolated grid points)'
 
+        if clipped_count > 0:
+            message += f' ({clipped_count} points clipped to fill_rect)'
+
         self.get_logger().info(message + '.')
 
         if self.latlon_enabled:
@@ -276,6 +301,8 @@ class CsvSensorFieldPublisher(Node):
         column_z: Optional[str],
         column_data: str,
         interpret_latlon: bool,
+        origin_latitude: float,
+        origin_longitude: float,
         distance_scale: float,
     ) -> Tuple[np.ndarray, np.ndarray, int, Optional[Dict[str, float]]]:
         if not path.exists():
@@ -335,8 +362,13 @@ class CsvSensorFieldPublisher(Node):
             lon_deg = points_array[:, 1]
             lat_rad = np.radians(lat_deg)
             lon_rad = np.radians(lon_deg)
-            lat0 = float(lat_rad[0])
-            lon0 = float(lon_rad[0])
+            # Use specified origin if provided, otherwise use first data point
+            if not math.isnan(origin_latitude) and not math.isnan(origin_longitude):
+                lat0 = math.radians(origin_latitude)
+                lon0 = math.radians(origin_longitude)
+            else:
+                lat0 = float(lat_rad[0])
+                lon0 = float(lon_rad[0])
             scale = float(distance_scale)
             avg_lat = 0.5 * (lat_rad + lat0)
             delta_lat = lat_rad - lat0
@@ -538,6 +570,36 @@ class CsvSensorFieldPublisher(Node):
             return float(parts[0]), float(parts[1])
         except ValueError as exc:
             raise ValueError('Rectangle corner values must be numeric.') from exc
+
+    @staticmethod
+    def _clip_points_to_rect(
+        points: np.ndarray,
+        values: np.ndarray,
+        rect_min: Tuple[float, float],
+        rect_max: Tuple[float, float],
+    ) -> Tuple[np.ndarray, np.ndarray, int]:
+        """Clip points to within the specified rectangle bounds.
+
+        Returns:
+            Tuple of (clipped_points, clipped_values, removed_count)
+        """
+        if points.size == 0:
+            return points, values, 0
+
+        min_x, min_y = min(rect_min[0], rect_max[0]), min(rect_min[1], rect_max[1])
+        max_x, max_y = max(rect_min[0], rect_max[0]), max(rect_min[1], rect_max[1])
+
+        # Check which points are within bounds (using first 2 dimensions)
+        x_coords = points[:, 0]
+        y_coords = points[:, 1]
+        mask = (x_coords >= min_x) & (x_coords <= max_x) & (y_coords >= min_y) & (y_coords <= max_y)
+
+        original_count = len(points)
+        clipped_points = points[mask]
+        clipped_values = values[mask]
+        removed_count = original_count - len(clipped_points)
+
+        return clipped_points, clipped_values, removed_count
 
     def _prepare_tps_models(self, sample_points: np.ndarray, sample_values: np.ndarray) -> None:
         if sample_points.shape[1] < 2:

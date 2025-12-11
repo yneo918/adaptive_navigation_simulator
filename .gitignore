@@ -5,3 +5,4 @@ __pycache__/
 *.py[cod]
 *.so
 .sensor_field_cache/
+trajectory/

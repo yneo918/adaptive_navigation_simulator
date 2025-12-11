@@ -3,14 +3,17 @@ csv_sensor_field:
     csv_path: data/radiation_field.csv
     frame_id: world
     interpret_latlon: true
+    origin_latitude: 37.480654
+    origin_longitude: 140.881685
     distance_unit: m
     column_x: latitude
     column_y: longitude
     column_data: radiation
     distance_scale: 0.05
-    fill_rect_min: -1600,600
-    fill_rect_max: 240,3000
-    fill_spacing: 1.0  # Augmentation point spacing in meters
+    fill_rect_min: -800,-900
+    fill_rect_max: 800,900
+    fill_spacing: 10.0  # Augmentation point spacing in meters
     fill_method: thin_plate
     cache_dir: .sensor_field_cache  # Cache directory (git-ignored)
     enable_cache: true  # Enable caching for faster startup
+    clip_points_to_fill_rect: true
