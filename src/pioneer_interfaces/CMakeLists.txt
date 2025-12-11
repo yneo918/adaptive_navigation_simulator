@@ -13,10 +13,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED) 
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/PioneerInfo.msg"
   "msg/ClusterInfo.msg"
-  "srv/RegRobot.srv"
-  "srv/RefGPS.srv"
   DEPENDENCIES geometry_msgs  # ← 追加
   DEPENDENCIES sensor_msgs  # ← 追加
 )
