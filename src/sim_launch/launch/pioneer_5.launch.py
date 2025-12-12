@@ -19,7 +19,6 @@ def generate_launch_description():
                 'y': '170.0',
                 't': '1.57',
                 'desired': 'desired',
-                'a': '0.2'
             }.items()
         ),
         IncludeLaunchDescription(
@@ -30,7 +29,6 @@ def generate_launch_description():
                 'y': '170.0',
                 't': '1.57',
                 'desired': 'desired',
-                'a': '0.2'
             }.items()
         ),
         IncludeLaunchDescription(
@@ -41,7 +39,6 @@ def generate_launch_description():
                 'y': '170.0', 
                 't': '1.57',
                 'desired': 'desired',
-                'a': '0.2'
             }.items()
         ),
         IncludeLaunchDescription(
@@ -52,7 +49,6 @@ def generate_launch_description():
                 'y': '170.0',
                 't': '1.57',
                 'desired': 'desired',
-                'a': '0.2'
             }.items()
         ),
         IncludeLaunchDescription(
@@ -63,7 +59,6 @@ def generate_launch_description():
                 'y': '170.0',
                 't': '1.57',
                 'desired': 'desired',
-                'a': '0.2'
             }.items()
         )
     ])

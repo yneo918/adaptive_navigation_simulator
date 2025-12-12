@@ -24,7 +24,7 @@ setup(
             'fake_rover = fake_rover_state_controller.fake_rover:main',
             'sim_robot = fake_rover_state_controller.sim_robot_2d:main',
             'fake_sensor = fake_rover_state_controller.fake_sensor:main',
-            'jointstate_publisher = fake_rover_state_controller.jointstate_publisher:main',
+            'tf_broadcaster = fake_rover_state_controller.tf_broadcaster:main',
             'arrow_publisher = fake_rover_state_controller.arrow_publisher:main',
         ],
     },
