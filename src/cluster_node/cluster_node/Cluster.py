@@ -156,7 +156,7 @@ class PentagonLeaderConfig(ClusterConfigurationBase):
         # Forward kinematics: robot space -> cluster space
         x_c = r_sym[0]  # Leader robot position
         y_c = r_sym[1]
-        theta_c = sp.atan2(r_sym[4] - r_sym[1], r_sym[3] - r_sym[0]) + sp.pi/2
+        theta_c = sp.atan2(r_sym[4] - r_sym[1], r_sym[3] - r_sym[0]) - sp.pi/2
 
         # Robot orientations relative to cluster
         phi = [r_sym[i*3 + 2] - theta_c for i in range(5)]
@@ -170,7 +170,7 @@ class PentagonLeaderConfig(ClusterConfigurationBase):
         
         # Bearing angles
         beta = [0, 0]  # First two robots have zero bearing
-        beta.append(sp.atan2(r_sym[7] - r_sym[1], r_sym[6] - r_sym[0]) - theta_c - sp.pi/2)
+        beta.append(sp.atan2(r_sym[7] - r_sym[1], r_sym[6] - r_sym[0]) - theta_c + sp.pi/2)
         # robot1 -> robot3
         beta.append(sp.atan2(r_sym[10] - r_sym[4], r_sym[9] - r_sym[3]) - theta_c)
         # robot2 -> robot4
@@ -182,12 +182,12 @@ class PentagonLeaderConfig(ClusterConfigurationBase):
         theta = [c_sym[2] + c_sym[3]]
 
         # Calculate remaining robot positions
-        x.append(x[0] + c_sym[8] * sp.cos(c_sym[2] - sp.pi/2))
-        y.append(y[0] + c_sym[8] * sp.sin(c_sym[2] - sp.pi/2))
+        x.append(x[0] + c_sym[8] * sp.cos(c_sym[2] + sp.pi/2))
+        y.append(y[0] + c_sym[8] * sp.sin(c_sym[2] + sp.pi/2))
         theta.append(c_sym[2] + c_sym[4])
 
-        x.append(x[0] + c_sym[9] * sp.cos(c_sym[12] + c_sym[2] + sp.pi/2))
-        y.append(y[0] + c_sym[9] * sp.sin(c_sym[12] + c_sym[2] + sp.pi/2))
+        x.append(x[0] + c_sym[9] * sp.cos(c_sym[12] + c_sym[2] - sp.pi/2))
+        y.append(y[0] + c_sym[9] * sp.sin(c_sym[12] + c_sym[2] - sp.pi/2))
         theta.append(c_sym[2] + c_sym[5])
 
         x.append(x[1] + c_sym[10] * sp.cos(c_sym[13] + c_sym[2]))

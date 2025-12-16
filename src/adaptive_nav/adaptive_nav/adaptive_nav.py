@@ -184,10 +184,10 @@ class ANNode(Node):
             norm_AB = eps
 
         # Unit vector x (same direction as AB)
-        x_unit = AB / norm_AB
+        y_unit = AB / norm_AB
 
         # Unit vector y (90° counterclockwise rotation)
-        y_unit = np.array([-x_unit[1], x_unit[0]])
+        x_unit = np.array([y_unit[1], -y_unit[0]])
 
         return x_unit, y_unit
 
@@ -252,90 +252,78 @@ class ANNode(Node):
         """
         Compute velocity commands for 5-robot mode.
 
+        Robot configuration (pentagon formation):
+            robot1: center/leader (rear)
+            robot2: left-rear (from robot1)
+            robot3: right-rear (from robot1)
+            robot4: left-front (from robot2)
+            robot5: right-front (from robot3)
+
         Returns:
             Twist message with computed velocities
         """
-        # Get robot positions as numpy arrays
-        pos_robot0 = self._get_robot_position_2d(0)
-        pos_robot1 = self._get_robot_position_2d(1)
-        pos_robot2 = self._get_robot_position_2d(2)
-        pos_robot3 = self._get_robot_position_2d(3)
-        pos_robot4 = self._get_robot_position_2d(4)
+        # Get robot positions as numpy arrays (robot1..5, 1-indexed)
+        pos_r1 = self._get_robot_position_2d(0)  # robot1: center (rear)
+        pos_r2 = self._get_robot_position_2d(1)  # robot2: left-rear
+        pos_r3 = self._get_robot_position_2d(2)  # robot3: right-rear
+        pos_r4 = self._get_robot_position_2d(3)  # robot4: left-front
+        pos_r5 = self._get_robot_position_2d(4)  # robot5: right-front
 
         # Get sensor values (z-coordinates in scalar field)
-        z_robot1 = self._get_robot_sensor_value(1)
-        z_robot2 = self._get_robot_sensor_value(2)
-        z_robot3 = self._get_robot_sensor_value(3)
-        z_robot4 = self._get_robot_sensor_value(4)
+        z_r1 = self._get_robot_sensor_value(0)
+        z_r2 = self._get_robot_sensor_value(1)
+        z_r3 = self._get_robot_sensor_value(2)
+        z_r4 = self._get_robot_sensor_value(3)
+        z_r5 = self._get_robot_sensor_value(4)
 
-        # Compute sensor value differences
-        dz_3_to_1 = z_robot3 - z_robot1
-        dz_4_to_2 = z_robot4 - z_robot2
-        dz_1_to_2 = z_robot1 - z_robot2
-        dz_3_to_4 = z_robot3 - z_robot4
+        # Compute sensor value differences along cluster X-axis (forward)
+        # robot2→robot4 and robot3→robot5 pairs (rear to front)
+        dz_r4_r2 = z_r4 - z_r2  # left side gradient (rear to front)
+        dz_r5_r3 = z_r5 - z_r3  # right side gradient (rear to front)
+
+        # Compute sensor value differences along cluster Y-axis (lateral)
+        # robot2→robot3 and robot4→robot5 pairs (left to right)
+        dz_r3_r2 = z_r3 - z_r2  # rear lateral gradient (left to right)
+        dz_r5_r4 = z_r5 - z_r4  # front lateral gradient (left to right)
 
         # Decompose vectors to compute gain components
-        # For x-direction gain
-        comp_x_BC, _, _, _, y_unit = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
-        comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
-        gain_y = (dz_1_to_2 / (comp_x_BC) + dz_3_to_4 / (comp_x_DE))
-        vel_y = self.gradient.mode.direction[0] * gain_y
+        # Reference frame: robot1→robot2 defines the cluster heading
 
-        # For x-direction gain
-        _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
-        _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
-        gain_x = (dz_3_to_1 / (comp_y_BD) + dz_4_to_2 / (comp_y_CE))
-        vel_x = self.gradient.mode.direction[1] * gain_x
+        # X-direction (forward) gain: use r2→r4 and r3→r5 vectors
+        comp_x_r2r4, _, _, _, _ = self._decompose_vector_CD(pos_r1, pos_r2, pos_r2, pos_r4)
+        comp_x_r3r5, _, _, _, _ = self._decompose_vector_CD(pos_r1, pos_r2, pos_r3, pos_r5)
+        gain_x = (dz_r4_r2 / comp_x_r2r4 + dz_r5_r3 / comp_x_r3r5)
+        vel_x = self.gradient.mode.direction[0] * gain_x
 
-        '''
-        # For rotational gain (cross-track error)
-        gain_cross_track_1 = self._compute_gain_from_Z_and_distance(
-            A=(pos_robot0[0], pos_robot0[1]),
-            B=(pos_robot1[0], pos_robot1[1]),
-            C=(pos_robot4[0], pos_robot4[1]),
-            Zb=z_robot1,
-            Zc=z_robot4,
-            ell=1.0
-        )
-        gain_cross_track_2 = self._compute_gain_from_Z_and_distance(
-            A=(pos_robot0[0], pos_robot0[1]),
-            B=(pos_robot3[0], pos_robot3[1]),
-            C=(pos_robot2[0], pos_robot2[1]),
-            Zb=z_robot3,
-            Zc=z_robot2,
-            ell=1.0
-        )
-        gain_angular = (gain_cross_track_1 + gain_cross_track_2)
-        vel_angular = self.gradient.mode.direction[2] * gain_angular * 10.0
-        '''
-        dz_left_normalized = dz_4_to_2 / (comp_y_CE)   # p5-p3方向
-        dz_right_normalized = dz_3_to_1 / (comp_y_BD)  # p4-p2方向
+        # Y-direction (lateral) gain: use r2→r3 and r4→r5 vectors
+        _, comp_y_r2r3, _, _, _ = self._decompose_vector_CD(pos_r1, pos_r2, pos_r2, pos_r3)
+        _, comp_y_r4r5, _, _, _ = self._decompose_vector_CD(pos_r1, pos_r2, pos_r4, pos_r5)
+        gain_y = (dz_r3_r2 / comp_y_r2r3 + dz_r5_r4 / comp_y_r4r5)
+        vel_y = self.gradient.mode.direction[1] * gain_y
 
-        gain_angular = (dz_right_normalized - dz_left_normalized) * self.gradient.mode.direction[2]
-
-        vel_angular = gain_angular * 10.0
+        # Angular (rotation) gain: difference between right and left gradients
+        dz_left_norm = dz_r4_r2 / comp_x_r2r4   # left side (r2→r4)
+        dz_right_norm = dz_r5_r3 / comp_x_r3r5  # right side (r3→r5)
+        gain_angular = (dz_right_norm - dz_left_norm) * self.gradient.mode.direction[2]
+        vel_angular = gain_angular * 3.0
 
         # Create velocity command message
         cmd_vel = Twist()
-        if False:
-            cmd_vel.linear.x = self.clip(vel_x, abs_max=MAX_VEL_CLUSTER)
-            cmd_vel.linear.y = self.clip(vel_y, abs_max=MAX_VEL_CLUSTER)
         cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_ROT_CLUSTER)
 
-        _x = abs(vel_x)
-        _y = abs(vel_y)
-        
-        if _x + _y != 0:
-            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x / (_x + _y)
-            cmd_vel.linear.y = MAX_VEL_CLUSTER * vel_y / (_x + _y)
+        # Normalize linear velocity to MAX_VEL_CLUSTER
+        vel_magnitude = abs(vel_x) + abs(vel_y)
+        if vel_magnitude > 0:
+            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x / vel_magnitude
+            cmd_vel.linear.y = MAX_VEL_CLUSTER * vel_y / vel_magnitude
         else:
             cmd_vel.linear.x = 0.0
             cmd_vel.linear.y = 0.0
 
         # Log debug information
         self._log_5_robot_debug_info(
-            z_values=(z_robot1, z_robot2, z_robot3, z_robot4),
-            dz_values=(dz_3_to_1, dz_4_to_2, dz_1_to_2, dz_3_to_4),
+            z_values=(z_r1, z_r2, z_r3, z_r4, z_r5),
+            dz_values=(dz_r4_r2, dz_r5_r3, dz_r3_r2, dz_r5_r4),
             gains=(gain_x, gain_y, gain_angular)
         )
 
@@ -343,22 +331,14 @@ class ANNode(Node):
 
     def _log_5_robot_debug_info(self, z_values, dz_values, gains):
         """Log debug information for 5-robot mode."""
-        z_robot1, z_robot2, z_robot3, z_robot4 = z_values
-        dz_3_to_1, dz_4_to_2, dz_1_to_2, dz_3_to_4 = dz_values
+        z_r1, z_r2, z_r3, z_r4, z_r5 = z_values
+        dz_r4_r2, dz_r5_r3, dz_r3_r2, dz_r5_r4 = dz_values
         gain_x, gain_y, gain_angular = gains
 
-        self.get_logger().info(f"z2 {z_robot1}")
-        self.get_logger().info(f"z3 {z_robot2}")
-        self.get_logger().info(f"z4 {z_robot3}")
-        self.get_logger().info(f"z5 {z_robot4}")
-        self.get_logger().info(f"d1 {dz_3_to_1}")
-        self.get_logger().info(f"d2 {dz_4_to_2}")
-        self.get_logger().info(f"d3 {dz_1_to_2}")
-        self.get_logger().info(f"d4 {dz_3_to_4}")
-        self.get_logger().info(f"x {self.gradient.mode.direction[0]}*{dz_1_to_2+dz_3_to_4} = {gain_x}")
-        self.get_logger().info(f"y {self.gradient.mode.direction[1]}*{dz_3_to_1+dz_4_to_2} = {gain_y}")
-        self.get_logger().info(f"t {self.gradient.mode.direction[2]}*{dz_4_to_2-dz_3_to_1} = {gain_angular}")
-        self.get_logger().info(f"adp {self.gradient.mode.value}")
+        self.get_logger().info(f"z: r1={z_r1:.2f}, r2={z_r2:.2f}, r3={z_r3:.2f}, r4={z_r4:.2f}, r5={z_r5:.2f}")
+        self.get_logger().info(f"dz: r4-r2={dz_r4_r2:.3f}, r5-r3={dz_r5_r3:.3f}, r3-r2={dz_r3_r2:.3f}, r5-r4={dz_r5_r4:.3f}")
+        self.get_logger().info(f"gains: x={gain_x:.3f}, y={gain_y:.3f}, angular={gain_angular:.3f}")
+        self.get_logger().info(f"mode: {self.gradient.mode.value}")
 
     def publish_velocities(self):
         """Compute gradient and publish velocity commands."""
