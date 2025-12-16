@@ -18,7 +18,7 @@ def generate_launch_description():
 
     default_rviz_config = os.path.join(
         get_package_share_directory('rover_description'),
-        'rviz/adap_paper.rviz',
+        'rviz/adaptive_navigation_dis.rviz',
     )
 
     return LaunchDescription([

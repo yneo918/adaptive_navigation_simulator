@@ -164,6 +164,8 @@ class AdaptiveNavigationGUI(Node):
 
         # Compute robot positions via inverse kinematics
         robot_positions = np.array(self._ikine_func(*c_state)).flatten()
+        self.get_logger().info(f"set_pose input: {c_state}")
+        self.get_logger().info(f"set_pose output: {robot_positions}")
 
         # Publish to each rover
         for i in range(self.n_rover):

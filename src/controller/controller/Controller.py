@@ -17,6 +17,7 @@ JOY_FREQ = FREQ # Frequency for joystick commands
 KP_GAIN = 1.0  # Position gain in m/s per m error
 KV_GAIN = 0.2  # Velocity gain in m/s per m/s error
 EPSILON = 0.5  # Distance threshold to consider robot at desired position in meters
+VEL_EPSILON = 0.001
 MAX_VEL = 10.0  # Maximum linear+angular velocity in m/s
 ROVER_DOF = 3  # (x, y, theta)
 
@@ -299,11 +300,12 @@ class Controller(Node):
                     x = msg.linear.x
                     y = msg.linear.y
                     t = msg.angular.z
+                    # REP103: body frame to world frame rotation (X+ forward, Y+ left)
                     ct = math.cos(self.c[2])
                     st = math.sin(self.c[2])
-                    self.cdot_des[0, 0] = x*ct - y*st
-                    self.cdot_des[1, 0] = x*st + y*ct
-                    self.cdot_des[2, 0] = self._wrap_to_pi(msg.angular.z * 0.3)
+                    self.cdot_des[0, 0] = x * ct - y * st  # world X
+                    self.cdot_des[1, 0] = x * st + y * ct  # world Y
+                    self.cdot_des[2, 0] = msg.angular.z
                     self.get_logger().info(f"msgs: {x}, {y}, {t} / cur_t :{self.c[2]}")
                     self.get_logger().info(f"cdot_des: {self.cdot_des[0, 0]}, {self.cdot_des[1, 0]}, {self.cdot_des[2, 0]}")
             except Exception as e:
@@ -511,8 +513,11 @@ class Controller(Node):
             if self.control_mode == ControlMode.POSITION and translation_magnitude < EPSILON * KP_GAIN: #multiply by gain to convert to m/s
                 return 0.0, 0.0
             
+            if self.control_mode == ControlMode.VELOCITY and translation_magnitude < VEL_EPSILON * KP_GAIN: #multiply by gain to convert to m/s
+                return 0.0, 0.0
+            
             # Compute desired heading and angular error
-            desired_angle = -math.atan2(x_vel, y_vel) #x and y are swapped to get angle from y axis
+            desired_angle = math.atan2(y_vel, x_vel) #x and y are swapped to get angle from y axis
             angular_error = desired_angle - current_theta #-2pi to 2pi
             #Get angular error for shortest path to desired angle
             angular_error = angular_error%(2*np.pi) 

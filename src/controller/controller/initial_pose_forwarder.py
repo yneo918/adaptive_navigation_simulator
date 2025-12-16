@@ -22,7 +22,7 @@ class InitialPoseForwarder(Node):
         yaw = math.atan2(
             2.0 * (orientation.w * orientation.z + orientation.x * orientation.y),
             1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z),
-        ) - math.pi / 2.0  # Adjust for Pioneer orientation
+        )
 
         pose_2d = Pose2D()
         pose_2d.x = message.pose.pose.position.x

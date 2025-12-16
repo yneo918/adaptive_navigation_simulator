@@ -232,9 +232,9 @@ class AdaptiveNagigator:
             grad: Tuple[float, float] = self.calc_gradient(robot_positions)
 
             # Calculate the bearing angle
-            # NOTE (1): PI/2 - ATAN2() returns the complement angle
-            # NOTE (2): grad[0], grad[1], is the x- and y- component
-            current_bearing: float = math.pi/2 - math.atan2(grad[1], grad[0]) #values range from 2pi to 0 
+            # REP103: atan2(y, x) gives angle from X+ axis (forward), counter-clockwise positive
+            # grad[0] = X component, grad[1] = Y component
+            current_bearing: float = math.atan2(grad[1], grad[0]) 
 
             # Update internal param
             self.curr_bearing = current_bearing

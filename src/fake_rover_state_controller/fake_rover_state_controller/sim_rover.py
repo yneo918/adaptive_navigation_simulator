@@ -128,10 +128,11 @@ class SimRover(Node):
         self.current_velocity['angular'] += angular_accel * dt
         self.current_velocity['angular'] = _clamp(self.current_velocity['angular'], -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED)
 
+        # REP103: X+ forward, Y+ left, counter-clockwise rotation positive
         heading_mid = self.position['theta'] + 0.5 * self.current_velocity['angular'] * dt
         self.position['theta'] = self._wrap_to_pi(self.position['theta'] + self.current_velocity['angular'] * dt)
-        self.position['x'] += self.current_velocity['linear'] * (-math.sin(heading_mid)) * dt
-        self.position['y'] += self.current_velocity['linear'] * math.cos(heading_mid) * dt
+        self.position['x'] += self.current_velocity['linear'] * math.cos(heading_mid) * dt
+        self.position['y'] += self.current_velocity['linear'] * math.sin(heading_mid) * dt
 
     def _publish_pose(self) -> None:
         pose = Pose2D()

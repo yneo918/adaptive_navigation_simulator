@@ -60,11 +60,18 @@ class FakeRover(Node):
             self.pubsub.publish(f'{self.prefix}/{self.robot_id}/pose2D', Pose2D(x=self.position['x'], y=self.position['y'], theta=self.position['theta']))
             return
         else:
-            _theta_avg = self.position['theta'] - self.vel['rotate'] / UPDATE_RATE / 2
-            self.position['theta'] -= UPDATE_RATE  * self.vel['rotate']
-            self.position['theta'] = self.wrap_to_pi(self.position['theta'])
-            self.position['x'] += self.vel['x'] / UPDATE_RATE
-            self.position['y'] += self.vel['y'] / UPDATE_RATE
+            dt = 1.0 / UPDATE_RATE
+            theta = self.position['theta']
+
+            # REP103: counter-clockwise rotation is positive around Z-axis
+            self.position['theta'] = self.wrap_to_pi(theta + self.vel['rotate'] * dt)
+
+            # REP103: transform body frame velocity to world frame (X+ forward, Y+ left)
+            vx_body = self.vel['x']
+            vy_body = self.vel['y']
+            self.position['x'] += (vx_body * math.cos(theta) - vy_body * math.sin(theta)) * dt
+            self.position['y'] += (vx_body * math.sin(theta) + vy_body * math.cos(theta)) * dt
+
             self.vel['alive'] -= 1
         self.pubsub.publish(f'{self.prefix}/{self.robot_id}/pose2D', Pose2D(x=self.position['x'], y=self.position['y'], theta=self.position['theta']))
     

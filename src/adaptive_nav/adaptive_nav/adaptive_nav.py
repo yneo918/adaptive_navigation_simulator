@@ -23,7 +23,7 @@ MAX_SENSOR = 100.0  # Max expected sensor value in dBm
 MIN_SENSOR = 0.0  # Min expected sensor value in dBm
 DESIRED_SENSOR = 40.0  # Desired sensor value in dBm for cross-track controller
 MAX_VEL_CLUSTER = 2.0
-MAX_VEL_ROT_CLUSTER = 1.0
+MAX_VEL_ROT_CLUSTER = 0.3
 
 class ANNode(Node):
     def __init__(self):
@@ -242,6 +242,7 @@ class ANNode(Node):
 
         self.get_logger().info(f"Publishing bearing: {bearing}")
 
+        # REP103: X+ forward, Y+ left, bearing=0 means moving in X+ direction
         cmd_vel = Twist()
         cmd_vel.linear.x = math.cos(bearing) * KV
         cmd_vel.linear.y = math.sin(bearing) * KV
@@ -277,14 +278,14 @@ class ANNode(Node):
         # For x-direction gain
         comp_x_BC, _, _, _, y_unit = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot2)
         comp_x_DE, _, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot3, pos_robot4)
-        gain_x = (dz_1_to_2 / -(comp_x_BC) + dz_3_to_4 / -(comp_x_DE))
-        vel_x = self.gradient.mode.direction[0] * gain_x
+        gain_y = (dz_1_to_2 / (comp_x_BC) + dz_3_to_4 / (comp_x_DE))
+        vel_y = self.gradient.mode.direction[0] * gain_y
 
-        # For y-direction gain
+        # For x-direction gain
         _, comp_y_BD, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot1, pos_robot3)
         _, comp_y_CE, _, _, _ = self._decompose_vector_CD(pos_robot0, pos_robot1, pos_robot2, pos_robot4)
-        gain_y = (dz_3_to_1 / (comp_y_BD) + dz_4_to_2 / (comp_y_CE))
-        vel_y = self.gradient.mode.direction[1] * gain_y
+        gain_x = (dz_3_to_1 / (comp_y_BD) + dz_4_to_2 / (comp_y_CE))
+        vel_x = self.gradient.mode.direction[1] * gain_x
 
         '''
         # For rotational gain (cross-track error)

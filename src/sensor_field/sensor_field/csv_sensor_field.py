@@ -29,7 +29,7 @@ class CsvSensorFieldPublisher(Node):
         self.declare_parameter('frame_id', 'world')
         self.declare_parameter('pointcloud_topic', 'sensor_field/points')
         self.declare_parameter('fill_pointcloud_topic', 'sensor_field/fill_points')
-        self.declare_parameter('publish_interval', 10)
+        self.declare_parameter('publish_interval', 10.0)
         self.declare_parameter('column_x', 'x')
         self.declare_parameter('column_y', 'y')
         self.declare_parameter('column_z', '')
@@ -255,7 +255,6 @@ class CsvSensorFieldPublisher(Node):
         self.fill_publisher = None
         if fill_pointcloud_topic and self.fill_points.size > 0:
             self.fill_publisher = self.create_publisher(PointCloud2, fill_pointcloud_topic, 10)
-        self.timer = self.create_timer(max(publish_interval, 0.01), self._publish_pointclouds)
 
         self.column_names = {
             'x': column_x,
@@ -292,6 +291,8 @@ class CsvSensorFieldPublisher(Node):
                 f'Interpreting x/y as latitude/longitude (origin {origin_lat:.6f}°, '
                 f'{origin_lon:.6f}°, scale={self.latlon_meta["scale"]:.6f}).'
             )
+        self._publish_pointclouds()
+        self.timer = self.create_timer(max(publish_interval, 0.01), self._publish_pointclouds)
 
     def _load_csv(
         self,

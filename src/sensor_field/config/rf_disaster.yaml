@@ -12,8 +12,9 @@ csv_sensor_field:
     distance_scale: 0.05
     fill_rect_min: -800,-900
     fill_rect_max: 800,900
-    fill_spacing: 10.0  # Augmentation point spacing in meters
+    fill_spacing: 1.0  # Augmentation point spacing in meters
     fill_method: thin_plate
     cache_dir: .sensor_field_cache  # Cache directory (git-ignored)
     enable_cache: true  # Enable caching for faster startup
     clip_points_to_fill_rect: true
+    publish_interval: 60.0

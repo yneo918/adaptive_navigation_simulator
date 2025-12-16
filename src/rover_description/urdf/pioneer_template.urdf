@@ -3,7 +3,8 @@
   <link name="base_link"/>
   <link name="rover_link">
     <visual>
-      <origin rpy="1.57 0.0 0.0" xyz="0.0 0.0 0.0"/>
+      <!-- REP103: X+ forward, rotated -90deg around Z from original Y+ forward mesh -->
+      <origin rpy="1.57 0.0 -1.57" xyz="0.0 0.0 0.0"/>
       <geometry>
         <mesh filename="package://rover_description/meshes/pioneer_cad_v2.stl"
               scale="0.001 0.001 0.001"/>

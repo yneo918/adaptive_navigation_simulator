@@ -143,10 +143,14 @@ class SimRover(Node):
         self.current_velocity['angular'] += angular_accel * dt
         self.current_velocity['angular'] = _clamp(self.current_velocity['angular'], -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED)
 
-        # 位置更新（ワールド座標系で直接x,y速度を適用）
-        self.position['theta'] = self._wrap_to_pi(self.position['theta'] + self.current_velocity['angular'] * dt)
-        self.position['x'] += self.current_velocity['x'] * dt
-        self.position['y'] += self.current_velocity['y'] * dt
+        # REP103: transform body frame velocity to world frame (X+ forward, Y+ left)
+        theta = self.position['theta']
+        self.position['theta'] = self._wrap_to_pi(theta + self.current_velocity['angular'] * dt)
+
+        vx_body = self.current_velocity['x']
+        vy_body = self.current_velocity['y']
+        self.position['x'] += (vx_body * math.cos(theta) - vy_body * math.sin(theta)) * dt
+        self.position['y'] += (vx_body * math.sin(theta) + vy_body * math.cos(theta)) * dt
 
     def _publish_pose(self) -> None:
         pose = Pose2D()
