@@ -235,17 +235,25 @@ class ANNode(Node):
         Returns:
             Twist message with computed velocities, or None if calculation fails
         """
-        bearing = self.gradient.get_velocity(zdes=self.normalize(self.z))
+        bearing = self.gradient.get_velocity(zdes=10.0)
         if bearing is None:
             self.get_logger().warn("No bearing calculated, skipping publish.")
             return None
 
         self.get_logger().info(f"Publishing bearing: {bearing}")
+        self.get_logger().info(f"Current bearing: {self.gradient.curr_bearing}")
+        self.get_logger().info(f"grad: {self.gradient.grad}")
+        self.get_logger().info(f"r1: {self.gradient.robot_positions[0]}")
+        self.get_logger().info(f"r4: {self.gradient.robot_positions[3]}")
+        self.get_logger().info(f"r5: {self.gradient.robot_positions[4]}")
+
+        x_unit, _ = self._compute_unit_vectors_from_AB(self._get_robot_position_2d(0), self._get_robot_position_2d(1))
 
         # REP103: X+ forward, Y+ left, bearing=0 means moving in X+ direction
         cmd_vel = Twist()
-        cmd_vel.linear.x = math.cos(bearing) * KV
-        cmd_vel.linear.y = math.sin(bearing) * KV
+        bearing_cluster = bearing - math.atan2(x_unit[1], x_unit[0])
+        cmd_vel.linear.x = math.cos(bearing_cluster) * MAX_VEL_CLUSTER
+        cmd_vel.linear.y = math.sin(bearing_cluster) * MAX_VEL_CLUSTER
         return cmd_vel
 
     def _compute_velocity_5_robot_mode(self):

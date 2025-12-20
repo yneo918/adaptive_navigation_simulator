@@ -1,0 +1,14 @@
+cesium_sensor_field:
+  ros__parameters:
+    csv_path: data/ces_radiation_field.csv
+    frame_id: world
+    interpret_latlon: true
+    origin_latitude: 37.480654
+    origin_longitude: 140.881685
+    distance_unit: m
+    column_x: latitude
+    column_y: longitude
+    column_data: radiation
+    distance_scale: 0.05
+    fill_method: idw
+    publish_interval: 1.0

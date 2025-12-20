@@ -59,7 +59,7 @@ class TrajectoryPlotter3D(Node):
         self.declare_parameter('line_width', 2.0)
         self.declare_parameter('marker_size', 10)
         self.declare_parameter('marker_interval', 10)  # Plot marker every N points
-        self.declare_parameter('trajectory_z_offset', 1.0)  # Z offset to lift trajectory above terrain
+        self.declare_parameter('trajectory_z_offset', 0.0)  # Z offset to lift trajectory above terrain
         self.declare_parameter('terrain_topics', ['sensor_field/points'])
         self.declare_parameter('show_lines', True)  # Show trajectory lines
         self.declare_parameter('line_robot_ids', ['p1', 'p2', 'p3', 'p4', 'p5'])  # Robot IDs to show lines (empty = all if show_lines=True)

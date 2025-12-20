@@ -5,9 +5,8 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /PointCloud21
-        - /PointCloud22
       Splitter Ratio: 0.5
-    Tree Height: 303
+    Tree Height: 1567
 Visualization Manager:
   Class: ""
   Displays:
@@ -56,22 +55,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -107,22 +90,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -158,22 +125,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -209,22 +160,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -260,22 +195,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -293,121 +212,41 @@ Visualization Manager:
           Value: true
         p1/rover_link:
           Value: true
-        p1/theta_axis:
-          Value: true
-        p1/world:
-          Value: true
-        p1/x_axis:
-          Value: true
-        p1/y_axis:
-          Value: true
         p1desired/base_link:
           Value: true
         p1desired/rover_link:
-          Value: true
-        p1desired/theta_axis:
-          Value: true
-        p1desired/world:
-          Value: true
-        p1desired/x_axis:
-          Value: true
-        p1desired/y_axis:
           Value: true
         p2/base_link:
           Value: true
         p2/rover_link:
           Value: true
-        p2/theta_axis:
-          Value: true
-        p2/world:
-          Value: true
-        p2/x_axis:
-          Value: true
-        p2/y_axis:
-          Value: true
         p2desired/base_link:
           Value: true
         p2desired/rover_link:
-          Value: true
-        p2desired/theta_axis:
-          Value: true
-        p2desired/world:
-          Value: true
-        p2desired/x_axis:
-          Value: true
-        p2desired/y_axis:
           Value: true
         p3/base_link:
           Value: true
         p3/rover_link:
           Value: true
-        p3/theta_axis:
-          Value: true
-        p3/world:
-          Value: true
-        p3/x_axis:
-          Value: true
-        p3/y_axis:
-          Value: true
         p3desired/base_link:
           Value: true
         p3desired/rover_link:
-          Value: true
-        p3desired/theta_axis:
-          Value: true
-        p3desired/world:
-          Value: true
-        p3desired/x_axis:
-          Value: true
-        p3desired/y_axis:
           Value: true
         p4/base_link:
           Value: true
         p4/rover_link:
           Value: true
-        p4/theta_axis:
-          Value: true
-        p4/world:
-          Value: true
-        p4/x_axis:
-          Value: true
-        p4/y_axis:
-          Value: true
         p4desired/base_link:
           Value: true
         p4desired/rover_link:
-          Value: true
-        p4desired/theta_axis:
-          Value: true
-        p4desired/world:
-          Value: true
-        p4desired/x_axis:
-          Value: true
-        p4desired/y_axis:
           Value: true
         p5/base_link:
           Value: true
         p5/rover_link:
           Value: true
-        p5/theta_axis:
-          Value: true
-        p5/world:
-          Value: true
-        p5/x_axis:
-          Value: true
-        p5/y_axis:
-          Value: true
         p5desired/base_link:
           Value: true
         p5desired/rover_link:
-          Value: true
-        p5desired/theta_axis:
-          Value: true
-        p5desired/world:
-          Value: true
-        p5desired/x_axis:
-          Value: true
-        p5desired/y_axis:
           Value: true
         world:
           Value: true
@@ -418,76 +257,36 @@ Visualization Manager:
       Show Names: true
       Tree:
         world:
-          p1/world:
-            p1/x_axis:
-              p1/y_axis:
-                p1/theta_axis:
-                  p1/base_link:
-                    p1/rover_link:
-                      {}
-          p1desired/world:
-            p1desired/x_axis:
-              p1desired/y_axis:
-                p1desired/theta_axis:
-                  p1desired/base_link:
-                    p1desired/rover_link:
-                      {}
-          p2/world:
-            p2/x_axis:
-              p2/y_axis:
-                p2/theta_axis:
-                  p2/base_link:
-                    p2/rover_link:
-                      {}
-          p2desired/world:
-            p2desired/x_axis:
-              p2desired/y_axis:
-                p2desired/theta_axis:
-                  p2desired/base_link:
-                    p2desired/rover_link:
-                      {}
-          p3/world:
-            p3/x_axis:
-              p3/y_axis:
-                p3/theta_axis:
-                  p3/base_link:
-                    p3/rover_link:
-                      {}
-          p3desired/world:
-            p3desired/x_axis:
-              p3desired/y_axis:
-                p3desired/theta_axis:
-                  p3desired/base_link:
-                    p3desired/rover_link:
-                      {}
-          p4/world:
-            p4/x_axis:
-              p4/y_axis:
-                p4/theta_axis:
-                  p4/base_link:
-                    p4/rover_link:
-                      {}
-          p4desired/world:
-            p4desired/x_axis:
-              p4desired/y_axis:
-                p4desired/theta_axis:
-                  p4desired/base_link:
-                    p4desired/rover_link:
-                      {}
-          p5/world:
-            p5/x_axis:
-              p5/y_axis:
-                p5/theta_axis:
-                  p5/base_link:
-                    p5/rover_link:
-                      {}
-          p5desired/world:
-            p5desired/x_axis:
-              p5desired/y_axis:
-                p5desired/theta_axis:
-                  p5desired/base_link:
-                    p5desired/rover_link:
-                      {}
+          p1/base_link:
+            p1/rover_link:
+              {}
+          p1desired/base_link:
+            p1desired/rover_link:
+              {}
+          p2/base_link:
+            p2/rover_link:
+              {}
+          p2desired/base_link:
+            p2desired/rover_link:
+              {}
+          p3/base_link:
+            p3/rover_link:
+              {}
+          p3desired/base_link:
+            p3desired/rover_link:
+              {}
+          p4/base_link:
+            p4/rover_link:
+              {}
+          p4desired/base_link:
+            p4desired/rover_link:
+              {}
+          p5/base_link:
+            p5/rover_link:
+              {}
+          p5desired/base_link:
+            p5desired/rover_link:
+              {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -517,22 +316,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -568,22 +351,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -619,22 +386,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -670,22 +421,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -721,22 +456,6 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
-        theta_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        world:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        x_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
-        y_axis:
-          Alpha: 1
-          Show Axes: false
-          Show Trail: false
       Mass Properties:
         Inertia: false
         Mass: false
@@ -897,7 +616,7 @@ Visualization Manager:
       Value: true
       Visual Enabled: true
     - Alpha: 1
-      Autocompute Intensity Bounds: false
+      Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
         Min Value: -10
@@ -911,43 +630,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 26
+      Max Intensity: 58.44687271118164
       Min Color: 0; 0; 0
-      Min Intensity: 0
-      Name: PointCloud2
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 1
-      Style: Flat Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /sensor_field/points
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: true
-    - Alpha: 1
-      Autocompute Intensity Bounds: false
-      Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
-      Enabled: true
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 26
-      Min Color: 0; 0; 0
-      Min Intensity: 0
+      Min Intensity: -26.141904830932617
       Name: PointCloud2
       Position Transformer: XYZ
       Selectable: true
@@ -960,7 +645,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /sensor_field/fill_points
+        Value: /sensor_field/points
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -995,16 +680,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 535.0757446289062
+      Distance: 671.3668212890625
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -67.99824523925781
-        Y: 193.4973907470703
-        Z: 0.19457358121871948
+        X: 92.31336975097656
+        Y: 47.66117477416992
+        Z: -65.19180297851562
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false

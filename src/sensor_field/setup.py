@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'csv_sensor_field = sensor_field.csv_sensor_field:main',
+            'cesium_sensor_field = sensor_field.cesium_sensor_field:main',
             'rf_field = sensor_field.rf_field:main',
             'sensor_field_pose2d = sensor_field.sensor_field_pose2d:main',
             'sample_2d = sensor_field.sample_2d:main',

@@ -43,12 +43,12 @@ class ControlMode(Enum):
         (e.g. RSSI strength) corresponds to a angle adjustment of 10 radians.
     """
 
-    MAX = ("maximum", math.pi/2, 0.0, None, 3)
-    MIN = ("minimum", -math.pi/2, 0.0, None, 3)
-    CONTOUR_CW = ("contour following clockwise", 0.0, 0.0, None, 3)
-    CONTOUR_CCW = ("contour following counter-clockwise", math.pi, 0.0, None, 3)
-    CROSSTRACK_CW = ("crosstrack_cw_controller", math.pi, math.pi, None, 3)
-    CROSSTRACK_CCW = ("crosstrack_ccw_controller", 0.0, math.pi, None, 3)
+    MAX = ("maximum", 0.0, 0.0, None, 3)
+    MIN = ("minimum", -math.pi, 0.0, None, 3)
+    CONTOUR_CW = ("contour following clockwise", -math.pi/2, 0.0, None, 3)
+    CONTOUR_CCW = ("contour following counter-clockwise", math.pi/2, 0.0, None, 3)
+    CROSSTRACK_CW = ("crosstrack_cw_controller", math.pi/2, math.pi, None, 3)
+    CROSSTRACK_CCW = ("crosstrack_ccw_controller", -math.pi/2, math.pi, None, 3)
     RIDGE_UP = ("ridge up", 0.0, 0.0, [1.0, 1.0, -1.0], 5)
     RIDGE_DOWN = ("ridge down", 0.0, 0.0, [-1.0, 1.0, -1.0], 5)
     TRENCH_UP = ("trench up", 0.0, 0.0, [1.0, -1.0, 1.0] , 5)
@@ -237,7 +237,7 @@ class ScalarGradient:
             # Calculate the bearing angle
             # NOTE (1): PI/2 - ATAN2() returns the complement angle
             # NOTE (2): grad[0], grad[1], is the x- and y- component
-            current_bearing: float = math.pi/2 - math.atan2(grad[1], grad[0]) #values range from 2pi to 0 
+            current_bearing: float = math.atan2(-grad[2]*grad[1], -grad[2]*grad[0]) #values range from 2pi to 0 
 
             # Update internal param
             self.curr_bearing = current_bearing
@@ -321,7 +321,7 @@ class ScalarGradient:
             # NOTE (2): [:2] is used to extract the x- and y-components of the 
             #           the gradient for navigation. The third field is not
             #           needed for navigation.
-            grad: np.ndarray = (- np.cross(vectors[0], vectors[1])).tolist()[:2]
+            grad: np.ndarray = (np.cross(vectors[0], vectors[1])).tolist()
 
             # Udpate internal param
             self.grad = grad

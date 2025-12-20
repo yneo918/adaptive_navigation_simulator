@@ -707,7 +707,9 @@ class CsvSensorFieldPublisher(Node):
         radius: float,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         if rect_min is None or rect_max is None:
-            return source_points.copy(), source_values.copy(), 0
+            empty_points = np.empty((0, dimension), dtype=np.float64)
+            empty_values = np.empty(0, dtype=np.float64)
+            return source_points.copy(), source_values.copy(), empty_points, empty_values
 
         if dimension < 2:
             raise ValueError('Grid interpolation requires at least 2D sensor data.')
@@ -718,7 +720,9 @@ class CsvSensorFieldPublisher(Node):
         min_y, max_y = sorted((y0, y1))
 
         if math.isclose(max_x, min_x) or math.isclose(max_y, min_y):
-            return source_points.copy(), source_values.copy(), 0
+            empty_points = np.empty((0, dimension), dtype=np.float64)
+            empty_values = np.empty(0, dtype=np.float64)
+            return source_points.copy(), source_values.copy(), empty_points, empty_values
 
         x_coords = np.arange(min_x, max_x + spacing * 0.5, spacing, dtype=np.float64)
         y_coords = np.arange(min_y, max_y + spacing * 0.5, spacing, dtype=np.float64)
