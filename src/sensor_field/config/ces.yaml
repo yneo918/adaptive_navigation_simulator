@@ -1,0 +1,29 @@
+csv_sensor_field:
+  ros__parameters:
+    csv_path: data/ces_radiation_field.csv
+    frame_id: world
+    interpret_latlon: true
+    origin_latitude: 37.480654
+    origin_longitude: 140.881685
+    distance_unit: m
+    column_x: latitude
+    column_y: longitude
+    column_data: radiation
+    distance_scale: 0.05
+    cache_dir: .sensor_field_cache  # Cache directory (git-ignored)
+    enable_cache: true  # Enable caching for faster startup
+    clip_points_to_fill_rect: true
+    publish_interval: 60.0
+
+contour_visualizer:
+  ros__parameters:
+    contour_levels: 20
+    show_labels: true
+    line_width: 1.0
+    z_offset: 0.1
+    colormap: YlOrRd
+    min_contour_points: 5
+    grid_resolution: 200
+    terrain_topics: ['sensor_field/points']
+    frame_id: world
+    label_interval: 2

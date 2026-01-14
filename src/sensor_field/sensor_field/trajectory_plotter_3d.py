@@ -63,6 +63,8 @@ class TrajectoryPlotter3D(Node):
         self.declare_parameter('terrain_topics', ['sensor_field/points'])
         self.declare_parameter('show_lines', True)  # Show trajectory lines
         self.declare_parameter('line_robot_ids', ['p1', 'p2', 'p3', 'p4', 'p5'])  # Robot IDs to show lines (empty = all if show_lines=True)
+        self.declare_parameter('visualization_mode', 'contour')  # '3d', 'contour', or 'both'
+        self.declare_parameter('contour_levels', 20)  # Number of contour levels
 
         # Get parameters
         self.num_robots = self.get_parameter('num_robots').value
@@ -88,6 +90,8 @@ class TrajectoryPlotter3D(Node):
         self.terrain_topics: List[str] = list(self.get_parameter('terrain_topics').value)
         self.show_lines = self.get_parameter('show_lines').value
         self.line_robot_ids: List[str] = list(self.get_parameter('line_robot_ids').value)
+        self.visualization_mode = self.get_parameter('visualization_mode').value
+        self.contour_levels = self.get_parameter('contour_levels').value
 
         # Terrain data storage
         self.terrain_points: np.ndarray = None
@@ -157,6 +161,8 @@ class TrajectoryPlotter3D(Node):
         self.get_logger().info(f'  terrain_topics: {self.terrain_topics}')
         self.get_logger().info(f'  show_lines: {self.show_lines}')
         self.get_logger().info(f'  line_robot_ids: {self.line_robot_ids}')
+        self.get_logger().info(f'  visualization_mode: {self.visualization_mode}')
+        self.get_logger().info(f'  contour_levels: {self.contour_levels}')
         self.get_logger().info('======================================')
         self.get_logger().info('TrajectoryPlotter3D initialized. Press Ctrl+C to generate plot.')
 
@@ -263,7 +269,7 @@ class TrajectoryPlotter3D(Node):
         print(f'[INFO] Data saved to {filepath}')
 
     def generate_plot(self) -> None:
-        """Generate the 3D plot with terrain and trajectories."""
+        """Generate plot(s) based on visualization_mode."""
         if not self.terrain_received:
             print('[WARN] No terrain data received. Cannot generate plot.')
             return
@@ -274,8 +280,23 @@ class TrajectoryPlotter3D(Node):
         # Save data for later viewing
         self.save_data()
 
-        print('[INFO] Generating 3D plot...')
+        if self.visualization_mode == 'both':
+            # Generate both 3D and contour plots
+            print('[INFO] Generating 3D plot...')
+            self._generate_3d_plot()
+            print('[INFO] Generating contour plot...')
+            self._generate_contour_plot()
+        elif self.visualization_mode == 'contour':
+            # Generate contour plot only
+            print('[INFO] Generating contour plot...')
+            self._generate_contour_plot()
+        else:  # '3d'
+            # Generate 3D plot only
+            print('[INFO] Generating 3D plot...')
+            self._generate_3d_plot()
 
+    def _generate_3d_plot(self) -> None:
+        """Generate 3D surface plot."""
         # Create figure
         fig = plt.figure(figsize=(14, 10))
         ax = fig.add_subplot(111, projection='3d')
@@ -289,7 +310,7 @@ class TrajectoryPlotter3D(Node):
         # Configure axes
         ax.set_xlabel('X [m]', fontsize=12)
         ax.set_ylabel('Y [m]', fontsize=12)
-        ax.set_zlabel('Elevation [m]', fontsize=12)
+        ax.set_zlabel('Radiation []', fontsize=12)
         ax.set_title('3D Terrain with Rover Trajectories', fontsize=14)
 
         # Set aspect ratio (X:Y:Z = 1:1:z_aspect_ratio)
@@ -304,9 +325,43 @@ class TrajectoryPlotter3D(Node):
 
         # Save plot
         plt.tight_layout()
-        output_path = self._get_output_path(self.output_file_base)
+        name, ext = os.path.splitext(self.output_file_base)
+        output_file_3d = f'{name}_3d{ext}'
+        output_path = self._get_output_path(output_file_3d)
         plt.savefig(output_path, dpi=self.dpi, bbox_inches='tight')
-        print(f'[INFO] Plot saved to {output_path}')
+        print(f'[INFO] 3D plot saved to {output_path}')
+
+        # Display plot (blocking - user closes window to exit)
+        plt.show()
+
+    def _generate_contour_plot(self) -> None:
+        """Generate 2D contour plot."""
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 10))
+
+        # Plot contour
+        self._plot_contour(ax)
+
+        # Plot trajectories
+        self._plot_trajectories_2d(ax)
+
+        # Configure axes
+        ax.set_xlabel('X [m]', fontsize=12)
+        ax.set_ylabel('Y [m]', fontsize=12)
+        ax.set_title('Radiation Field with Rover Trajectories', fontsize=14)
+        ax.set_aspect('equal')
+
+        # Add legend
+        if any(len(traj) > 0 for traj in self.trajectories.values()):
+            ax.legend(loc='upper left')
+
+        # Save plot
+        plt.tight_layout()
+        name, ext = os.path.splitext(self.output_file_base)
+        output_file_contour = f'{name}_contour{ext}'
+        output_path = self._get_output_path(output_file_contour)
+        plt.savefig(output_path, dpi=self.dpi, bbox_inches='tight')
+        print(f'[INFO] Contour plot saved to {output_path}')
 
         # Display plot (blocking - user closes window to exit)
         plt.show()
@@ -348,6 +403,37 @@ class TrajectoryPlotter3D(Node):
         # Add colorbar
         fig = ax.get_figure()
         fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10, label='Elevation [m]')
+
+    def _plot_contour(self, ax) -> None:
+        """Plot terrain as 2D contour map."""
+        x_unique = np.unique(self.terrain_points[:, 0])
+        y_unique = np.unique(self.terrain_points[:, 1])
+
+        x_min, x_max = x_unique.min(), x_unique.max()
+        y_min, y_max = y_unique.min(), y_unique.max()
+
+        grid_resolution = min(len(x_unique), len(y_unique), 200)
+        xi = np.linspace(x_min, x_max, grid_resolution)
+        yi = np.linspace(y_min, y_max, grid_resolution)
+        X, Y = np.meshgrid(xi, yi)
+
+        Z = griddata(
+            self.terrain_points,
+            self.terrain_elevations,
+            (X, Y),
+            method='linear',
+            fill_value=0.0
+        )
+
+        # Filled contour
+        contourf = ax.contourf(X, Y, Z, levels=self.contour_levels, cmap='YlOrRd', alpha=0.8)
+
+        # Contour lines
+        contour = ax.contour(X, Y, Z, levels=self.contour_levels, colors='black', linewidths=0.3, alpha=0.5)
+        ax.clabel(contour, inline=True, fontsize=6, fmt='%.2f')
+
+        fig = ax.get_figure()
+        fig.colorbar(contourf, ax=ax, shrink=0.8, label='Radiation (normalized)')
 
     def _plot_trajectories(self, ax: Axes3D) -> None:
         """Plot rover trajectories on the terrain surface."""
@@ -413,6 +499,49 @@ class TrajectoryPlotter3D(Node):
                           edgecolors='black',
                           linewidths=1,
                           zorder=10)
+
+            print(f'[INFO] Plotted {len(trajectory)} points for {robot_id}')
+
+    def _plot_trajectories_2d(self, ax) -> None:
+        """Plot rover trajectories on 2D map."""
+        for idx, robot_id in enumerate(self.robot_ids[:self.num_robots]):
+            trajectory = self.trajectories.get(robot_id, [])
+            if len(trajectory) == 0:
+                continue
+
+            color = self.robot_colors[idx % len(self.robot_colors)]
+
+            # Extract x, y coordinates
+            xs = [p[0] for p in trajectory]
+            ys = [p[1] for p in trajectory]
+
+            # Determine if this robot should have lines
+            should_show_line = self.show_lines and (
+                len(self.line_robot_ids) == 0 or robot_id in self.line_robot_ids
+            )
+
+            # Plot trajectory line (optional)
+            if should_show_line:
+                ax.plot(xs, ys, color=color, linewidth=self.line_width,
+                       label=f'Robot {robot_id}', zorder=5)
+                label = None  # Already labeled by line
+            else:
+                label = f'Robot {robot_id}'
+
+            # Markers at intervals
+            marker_xs = xs[::self.marker_interval]
+            marker_ys = ys[::self.marker_interval]
+            ax.scatter(marker_xs, marker_ys, color=color, s=self.marker_size,
+                      marker='o', edgecolors='black', linewidths=0.5,
+                      zorder=6, label=label)
+
+            if len(xs) > 0:
+                # Start (triangle)
+                ax.scatter([xs[0]], [ys[0]], color=color, s=self.marker_size * 3,
+                          marker='^', edgecolors='black', linewidths=1, zorder=10)
+                # End (square)
+                ax.scatter([xs[-1]], [ys[-1]], color=color, s=self.marker_size * 3,
+                          marker='s', edgecolors='black', linewidths=1, zorder=10)
 
             print(f'[INFO] Plotted {len(trajectory)} points for {robot_id}')
 

@@ -32,6 +32,7 @@ setup(
             'paper_field = sensor_field.paper_field:main',
             'trajectory_plotter_3d = sensor_field.trajectory_plotter_3d:main',
             'trajectory_viewer = sensor_field.trajectory_viewer:main',
+            'contour_visualizer = sensor_field.contour_visualizer:main',
         ],
     },
 )
