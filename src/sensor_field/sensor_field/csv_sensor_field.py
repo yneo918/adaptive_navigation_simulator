@@ -422,7 +422,7 @@ class CsvSensorFieldPublisher(Node):
         intensity = values.astype(np.float32, copy=False)
         buffer = bytearray(self.point_step * len(padded_points))
         for index, (x, y, z) in enumerate(padded_points):
-            struct.pack_into('ffff', buffer, index * self.point_step, float(x), float(y), intensity[index], intensity[index])
+            struct.pack_into('ffff', buffer, index * self.point_step, float(x), float(y), intensity[index]*100, intensity[index])
 
         msg.data = bytes(buffer)
         return msg

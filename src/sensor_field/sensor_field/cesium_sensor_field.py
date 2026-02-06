@@ -36,7 +36,11 @@ class CesiumSensorFieldPublisher(CsvSensorFieldPublisher):
         origin_longitude: float,
         distance_scale: float,
     ) -> Tuple[np.ndarray, np.ndarray, int, Optional[Dict[str, float]]]:
-        """Load CSV and apply log10(x+1) normalization to values."""
+        """Load CSV and apply log10 normalization to values.
+
+        Zero values are mapped to 0.0, non-zero values are mapped to 0.1-1.0
+        to clearly distinguish between zero and non-zero measurements.
+        """
         points, values, dimension, latlon_meta = super()._load_csv(
             path,
             column_x,
@@ -49,28 +53,43 @@ class CesiumSensorFieldPublisher(CsvSensorFieldPublisher):
             distance_scale,
         )
 
-        # Apply log10(x+1) normalization
         original_min = float(np.min(values))
         original_max = float(np.max(values))
 
-        # log10(x+1) transformation
-        log_values = np.log10(values + 1.0)
-        log_max = float(np.max(log_values))
+        # Identify non-zero values
+        nonzero_mask = values > 0
+        nonzero_count = int(np.sum(nonzero_mask))
+        zero_count = len(values) - nonzero_count
 
-        # Update stored log_max for reference
-        self._log_max = log_max if log_max > 0 else 1.0
+        # Initialize output array (zeros remain 0.0)
+        normalized_values = np.zeros_like(values)
 
-        # Normalize to 0.0-1.0
-        if log_max > 0:
-            normalized_values = log_values / log_max
+        if nonzero_count > 0:
+            # Calculate log range from non-zero values only
+            nonzero_values = values[nonzero_mask]
+            log_min = float(np.log10(np.min(nonzero_values)))
+            log_max = float(np.max(np.log10(nonzero_values)))
+
+            # Update stored log_max for reference
+            self._log_max = log_max
+
+            # Map non-zero values to 0.1-1.0 range
+            log_vals = np.log10(nonzero_values)
+            if log_max > log_min:
+                norm_vals = (log_vals - log_min) / (log_max - log_min)
+            else:
+                norm_vals = np.ones_like(log_vals)
+            norm_vals = np.clip(norm_vals, 0.0, 1.0)
+            normalized_values[nonzero_mask] = 0.1 + 0.9 * norm_vals
+
+            self.get_logger().info(
+                f'Applied log10 normalization: '
+                f'original [{original_min:.0f}, {original_max:.0f}] kBq/m² -> '
+                f'log [{log_min:.2f}, {log_max:.2f}] -> '
+                f'zero({zero_count})=0.0, non-zero({nonzero_count})=[0.1, 1.0]'
+            )
         else:
-            normalized_values = log_values
-
-        self.get_logger().info(
-            f'Applied log10(x+1) normalization: '
-            f'original range [{original_min:.0f}, {original_max:.0f}] kBq/m² -> '
-            f'log range [0, {log_max:.3f}] -> normalized [0.0, 1.0]'
-        )
+            self.get_logger().warn('All values are zero, no normalization applied')
 
         return points, normalized_values, dimension, latlon_meta
 

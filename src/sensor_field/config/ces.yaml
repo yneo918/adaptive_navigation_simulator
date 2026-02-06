@@ -17,13 +17,13 @@ csv_sensor_field:
 
 contour_visualizer:
   ros__parameters:
-    contour_levels: 20
+    contour_levels: 50
     show_labels: true
     line_width: 1.0
     z_offset: 0.1
     colormap: YlOrRd
     min_contour_points: 5
-    grid_resolution: 200
+    grid_resolution:  1000
     terrain_topics: ['sensor_field/points']
     frame_id: world
     label_interval: 2
