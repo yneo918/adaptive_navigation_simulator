@@ -10,11 +10,13 @@ Creates a matplotlib 3D plot showing:
 - Rover trajectories as lines and points on the terrain surface
 """
 
+import math
 import os
 import struct
 import sys
 from collections import defaultdict
 from datetime import datetime
+from functools import partial
 from typing import Dict, List, Set, Tuple
 
 # Fix mpl_toolkits namespace package conflict between system and user installations
@@ -33,7 +35,8 @@ from scipy.interpolate import griddata, LinearNDInterpolator, NearestNDInterpola
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Pose2D
+from geometry_msgs.msg import Pose2D, PoseStamped
+from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2
 
 from robot_interfaces.srv import GetSensor2D
@@ -55,6 +58,10 @@ class TrajectoryPlotter3D(Node):
         self.declare_parameter('dpi', 150)
         self.declare_parameter('elevation_scale', 1.0)  # Scale factor for Z axis
         self.declare_parameter('z_aspect_ratio', 0.2)  # Z axis display ratio (X:Y:Z = 1:1:z_aspect_ratio)
+        # Coordinate scaling parameters (for reverting sensor_field distance_scale)
+        self.declare_parameter('sensor_distance_scale', 1.0)  # Same value as sensor_field distance_scale
+        self.declare_parameter('original_coordinate_unit', 'm')  # Original coordinate unit (e.g., 'm', 'km', 'mm')
+        self.declare_parameter('original_data_unit', '')  # Original data unit for Z axis (e.g., 'dBm', 'Sv/h')
         self.declare_parameter('terrain_alpha', 0.7)
         self.declare_parameter('line_width', 2.0)
         self.declare_parameter('marker_size', 10)
@@ -83,6 +90,17 @@ class TrajectoryPlotter3D(Node):
         self.elevation_scale = self.get_parameter('elevation_scale').value
         self.z_aspect_ratio = self.get_parameter('z_aspect_ratio').value
         self.terrain_alpha = self.get_parameter('terrain_alpha').value
+
+        # Coordinate scaling parameters
+        self.sensor_distance_scale = self.get_parameter('sensor_distance_scale').value
+        self.original_coord_unit = self.get_parameter('original_coordinate_unit').value
+        self.original_data_unit = self.get_parameter('original_data_unit').value
+
+        # Calculate display scale (inverse of sensor_distance_scale)
+        if self.sensor_distance_scale > 0.0:
+            self.display_scale_xy = 1.0 / self.sensor_distance_scale
+        else:
+            self.display_scale_xy = 1.0
         self.line_width = self.get_parameter('line_width').value
         self.marker_size = self.get_parameter('marker_size').value
         self.marker_interval = self.get_parameter('marker_interval').value
@@ -119,7 +137,7 @@ class TrajectoryPlotter3D(Node):
             sub = self.create_subscription(
                 PointCloud2,
                 topic,
-                lambda msg, t=topic: self._terrain_callback(msg, t),
+                partial(self._terrain_callback, topic_name=topic),
                 10
             )
             self.terrain_subs.append(sub)
@@ -132,7 +150,7 @@ class TrajectoryPlotter3D(Node):
             sub = self.create_subscription(
                 Pose2D,
                 topic,
-                lambda msg, rid=robot_id: self._pose_callback(msg, rid),
+                partial(self._pose_callback, robot_id=robot_id),
                 10
             )
             self.pose_subs.append(sub)
@@ -140,6 +158,24 @@ class TrajectoryPlotter3D(Node):
 
         # Service client for elevation queries
         self.elevation_client = self.create_client(GetSensor2D, 'get_sensor')
+
+        # RViz用のPathパブリッシャーとメッセージを各ロボット用に作成
+        self.path_publishers: Dict[str, rclpy.publisher.Publisher] = {}
+        self.paths: Dict[str, Path] = {}
+
+        # line_robot_idsで指定されたロボットのみPathパブリッシャーを作成
+        robot_ids_for_path = self.line_robot_ids if len(self.line_robot_ids) > 0 else self.robot_ids[:self.num_robots]
+        for robot_id in robot_ids_for_path:
+            topic = f'{self.robot_prefix}/{robot_id}/path' if self.robot_prefix else f'/{robot_id}/path'
+            pub = self.create_publisher(Path, topic, 10)
+            self.path_publishers[robot_id] = pub
+
+            # Path初期化
+            path = Path()
+            path.header.frame_id = 'world'
+            self.paths[robot_id] = path
+
+            self.get_logger().info(f'Publishing RViz path to {topic}')
 
         # Log all parameters
         self.get_logger().info('=== TrajectoryPlotter3D Parameters ===')
@@ -162,7 +198,15 @@ class TrajectoryPlotter3D(Node):
         self.get_logger().info(f'  show_lines: {self.show_lines}')
         self.get_logger().info(f'  line_robot_ids: {self.line_robot_ids}')
         self.get_logger().info(f'  visualization_mode: {self.visualization_mode}')
+        self.get_logger().info(f'  sensor_distance_scale: {self.sensor_distance_scale}')
+        self.get_logger().info(f'  original_coordinate_unit: {self.original_coord_unit}')
+        self.get_logger().info(f'  original_data_unit: {self.original_data_unit}')
+        self.get_logger().info(f'  display_scale_xy: {self.display_scale_xy}')
         self.get_logger().info(f'  contour_levels: {self.contour_levels}')
+        if len(robot_ids_for_path) > 0:
+            self.get_logger().info(f'  RViz path enabled for: {robot_ids_for_path}')
+        else:
+            self.get_logger().info('  RViz path: disabled (no robots in line_robot_ids)')
         self.get_logger().info('======================================')
         self.get_logger().info('TrajectoryPlotter3D initialized. Press Ctrl+C to generate plot.')
 
@@ -228,6 +272,36 @@ class TrajectoryPlotter3D(Node):
             self.trajectories[robot_id].append((msg.x, msg.y, current_time))
             self.last_sample_time[robot_id] = current_time
 
+            # RViz Path更新（line_robot_idsに含まれる場合のみ）
+            if robot_id in self.path_publishers:
+                self._update_rviz_path(robot_id, msg)
+
+    def _update_rviz_path(self, robot_id: str, msg: Pose2D) -> None:
+        """Update and publish RViz Path message."""
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        pose_stamped.header.frame_id = 'world'
+
+        # Position
+        pose_stamped.pose.position.x = msg.x
+        pose_stamped.pose.position.y = msg.y
+        pose_stamped.pose.position.z = 0.0
+
+        # Orientation (theta → quaternion変換、REP103準拠: Z軸回転)
+        # q = [0, 0, sin(θ/2), cos(θ/2)]
+        half_theta = msg.theta / 2.0
+        pose_stamped.pose.orientation.x = 0.0
+        pose_stamped.pose.orientation.y = 0.0
+        pose_stamped.pose.orientation.z = math.sin(half_theta)
+        pose_stamped.pose.orientation.w = math.cos(half_theta)
+
+        # Pathに追加（無制限）
+        self.paths[robot_id].poses.append(pose_stamped)
+        self.paths[robot_id].header.stamp = pose_stamped.header.stamp
+
+        # 配信
+        self.path_publishers[robot_id].publish(self.paths[robot_id])
+
     def _get_elevation_at(self, x: float, y: float) -> float:
         """Get terrain elevation at (x, y) using cached interpolators."""
         if self._linear_interp is None:
@@ -265,6 +339,10 @@ class TrajectoryPlotter3D(Node):
             marker_size=self.marker_size,
             marker_interval=self.marker_interval,
             trajectory_z_offset=self.trajectory_z_offset,
+            # Coordinate scaling information
+            sensor_distance_scale=self.sensor_distance_scale,
+            original_coordinate_unit=self.original_coord_unit,
+            original_data_unit=self.original_data_unit,
         )
         print(f'[INFO] Data saved to {filepath}')
 
@@ -297,8 +375,8 @@ class TrajectoryPlotter3D(Node):
 
     def _generate_3d_plot(self) -> None:
         """Generate 3D surface plot."""
-        # Create figure
-        fig = plt.figure(figsize=(14, 10))
+        # Create figure with constrained layout for zoom compatibility
+        fig = plt.figure(figsize=(14, 10), constrained_layout=True)
         ax = fig.add_subplot(111, projection='3d')
 
         # Create terrain surface
@@ -307,10 +385,13 @@ class TrajectoryPlotter3D(Node):
         # Plot trajectories
         self._plot_trajectories(ax)
 
-        # Configure axes
-        ax.set_xlabel('X [m]', fontsize=12)
-        ax.set_ylabel('Y [m]', fontsize=12)
-        ax.set_zlabel('Radiation []', fontsize=12)
+        # Configure axes with dynamic units
+        ax.set_xlabel(f'X [{self.original_coord_unit}]', fontsize=12)
+        ax.set_ylabel(f'Y [{self.original_coord_unit}]', fontsize=12)
+        if self.original_data_unit:
+            ax.set_zlabel(f'Radiation [{self.original_data_unit}]', fontsize=12)
+        else:
+            ax.set_zlabel('Radiation []', fontsize=12)
         ax.set_title('3D Terrain with Rover Trajectories', fontsize=14)
 
         # Set aspect ratio (X:Y:Z = 1:1:z_aspect_ratio)
@@ -324,7 +405,6 @@ class TrajectoryPlotter3D(Node):
         ax.view_init(elev=30, azim=45)
 
         # Save plot
-        plt.tight_layout()
         name, ext = os.path.splitext(self.output_file_base)
         output_file_3d = f'{name}_3d{ext}'
         output_path = self._get_output_path(output_file_3d)
@@ -336,8 +416,8 @@ class TrajectoryPlotter3D(Node):
 
     def _generate_contour_plot(self) -> None:
         """Generate 2D contour plot."""
-        # Create figure
-        fig, ax = plt.subplots(figsize=(12, 10))
+        # Create figure with constrained layout for zoom compatibility
+        fig, ax = plt.subplots(figsize=(12, 10), constrained_layout=True)
 
         # Plot contour
         self._plot_contour(ax)
@@ -345,9 +425,9 @@ class TrajectoryPlotter3D(Node):
         # Plot trajectories
         self._plot_trajectories_2d(ax)
 
-        # Configure axes
-        ax.set_xlabel('X [m]', fontsize=12)
-        ax.set_ylabel('Y [m]', fontsize=12)
+        # Configure axes with dynamic units
+        ax.set_xlabel(f'X [{self.original_coord_unit}]', fontsize=12)
+        ax.set_ylabel(f'Y [{self.original_coord_unit}]', fontsize=12)
         ax.set_title('Radiation Field with Rover Trajectories', fontsize=14)
         ax.set_aspect('equal')
 
@@ -356,7 +436,6 @@ class TrajectoryPlotter3D(Node):
             ax.legend(loc='upper left')
 
         # Save plot
-        plt.tight_layout()
         name, ext = os.path.splitext(self.output_file_base)
         output_file_contour = f'{name}_contour{ext}'
         output_path = self._get_output_path(output_file_contour)
@@ -368,9 +447,14 @@ class TrajectoryPlotter3D(Node):
 
     def _plot_terrain_surface(self, ax: Axes3D) -> None:
         """Plot terrain as a 3D surface."""
+        # Apply display scale to coordinates
+        scaled_points = self.terrain_points.copy()
+        scaled_points[:, 0] *= self.display_scale_xy
+        scaled_points[:, 1] *= self.display_scale_xy
+
         # Create regular grid for surface plot
-        x_unique = np.unique(self.terrain_points[:, 0])
-        y_unique = np.unique(self.terrain_points[:, 1])
+        x_unique = np.unique(scaled_points[:, 0])
+        y_unique = np.unique(scaled_points[:, 1])
 
         # Determine grid resolution
         x_min, x_max = x_unique.min(), x_unique.max()
@@ -382,9 +466,9 @@ class TrajectoryPlotter3D(Node):
         yi = np.linspace(y_min, y_max, grid_resolution)
         X, Y = np.meshgrid(xi, yi)
 
-        # Interpolate elevation data onto grid
+        # Interpolate elevation data onto grid (use scaled coordinates)
         Z = griddata(
-            self.terrain_points,
+            scaled_points,
             self.terrain_elevations * self.elevation_scale,
             (X, Y),
             method='linear',
@@ -406,8 +490,13 @@ class TrajectoryPlotter3D(Node):
 
     def _plot_contour(self, ax) -> None:
         """Plot terrain as 2D contour map."""
-        x_unique = np.unique(self.terrain_points[:, 0])
-        y_unique = np.unique(self.terrain_points[:, 1])
+        # Apply display scale to coordinates
+        scaled_points = self.terrain_points.copy()
+        scaled_points[:, 0] *= self.display_scale_xy
+        scaled_points[:, 1] *= self.display_scale_xy
+
+        x_unique = np.unique(scaled_points[:, 0])
+        y_unique = np.unique(scaled_points[:, 1])
 
         x_min, x_max = x_unique.min(), x_unique.max()
         y_min, y_max = y_unique.min(), y_unique.max()
@@ -418,7 +507,7 @@ class TrajectoryPlotter3D(Node):
         X, Y = np.meshgrid(xi, yi)
 
         Z = griddata(
-            self.terrain_points,
+            scaled_points,
             self.terrain_elevations,
             (X, Y),
             method='linear',
@@ -448,9 +537,13 @@ class TrajectoryPlotter3D(Node):
             xs = [p[0] for p in trajectory]
             ys = [p[1] for p in trajectory]
 
-            # Get z (elevation) for each point on trajectory
+            # Get z (elevation) for each point on trajectory (using original coordinates)
             zs = [self._get_elevation_at(x, y) * self.elevation_scale + self.trajectory_z_offset
                   for x, y in zip(xs, ys)]
+
+            # Apply display scale to coordinates for plotting
+            xs = [x * self.display_scale_xy for x in xs]
+            ys = [y * self.display_scale_xy for y in ys]
 
             # Determine if this robot should have lines
             # show_lines=True and (line_robot_ids empty or robot_id in line_robot_ids)
@@ -514,6 +607,10 @@ class TrajectoryPlotter3D(Node):
             # Extract x, y coordinates
             xs = [p[0] for p in trajectory]
             ys = [p[1] for p in trajectory]
+
+            # Apply display scale to coordinates for plotting
+            xs = [x * self.display_scale_xy for x in xs]
+            ys = [y * self.display_scale_xy for y in ys]
 
             # Determine if this robot should have lines
             should_show_line = self.show_lines and (
