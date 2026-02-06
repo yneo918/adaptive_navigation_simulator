@@ -205,7 +205,7 @@ class StatusWindow5Robot(StatusWindowBase):
         for i, param_name in enumerate(["d2", "d3", "d4", "d5"], 2):
             spin = QDoubleSpinBox()
             spin.setMinimum(0.0)
-            spin.setMaximum(100.0)
+            spin.setMaximum(1000.0)
             spin.setValue(getattr(self.node, f"cluster_{param_name}"))
             spin.setSingleStep(0.1)
             spin.valueChanged.connect(
