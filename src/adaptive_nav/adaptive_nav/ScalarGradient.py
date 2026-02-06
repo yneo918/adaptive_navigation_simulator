@@ -45,10 +45,10 @@ class ControlMode(Enum):
 
     MAX = ("maximum", 0.0, 0.0, None, 3)
     MIN = ("minimum", -math.pi, 0.0, None, 3)
-    CONTOUR_CW = ("contour following clockwise", -math.pi/2, 0.0, None, 3)
-    CONTOUR_CCW = ("contour following counter-clockwise", math.pi/2, 0.0, None, 3)
-    CROSSTRACK_CW = ("crosstrack_cw_controller", math.pi/2, math.pi, None, 3)
-    CROSSTRACK_CCW = ("crosstrack_ccw_controller", -math.pi/2, math.pi, None, 3)
+    CONTOUR_CW = ("contour following clockwise", math.pi/2, 0.0, None, 3)
+    CONTOUR_CCW = ("contour following counter-clockwise", -math.pi/2, 0.0, None, 3)
+    CROSSTRACK_CW = ("crosstrack_cw_controller", math.pi/2, math.pi*2, None, 3)
+    CROSSTRACK_CCW = ("crosstrack_ccw_controller", -math.pi/2, math.pi*2, None, 3)
     RIDGE_UP = ("ridge up", 0.0, 0.0, [1.0, 1.0, -1.0], 5)
     RIDGE_DOWN = ("ridge down", 0.0, 0.0, [-1.0, 1.0, -1.0], 5)
     TRENCH_UP = ("trench up", 0.0, 0.0, [1.0, -1.0, 1.0] , 5)
@@ -163,9 +163,9 @@ class ScalarGradient:
         ):
             return 0
 
-        return 1 if self.mode in (
+        return -1 if self.mode in (
             ControlMode.CROSSTRACK_CW,
-        ) else -1
+        ) else 1
 
     @property
     def tail(self) -> int:
@@ -254,7 +254,7 @@ class ScalarGradient:
             # cross-track control
             desired_bearing: float = current_bearing + self.mode.bearing_offset \
             + self.rotation * (
-                self.db_sign(self.z_err) * min(self.mode.gain * abs(self.z_err), math.pi/2) - math.pi/2 #believe - math.pi/2 was missing
+                self.sign(self.z_err) * min(self.mode.gain * abs(self.z_err), math.pi/2)
             )
 
             # Update internal param
