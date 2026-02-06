@@ -64,6 +64,7 @@ def launch_setup(context, *args, **kwargs):
     actions.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(controller_launch),
+            launch_arguments={'time_scale': LaunchConfiguration('time_scale')}.items(),
             condition=IfCondition(enable_controller)
         )
     )
@@ -89,6 +90,7 @@ def launch_setup(context, *args, **kwargs):
     actions.append(
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(robots_launch),
+            launch_arguments={'time_scale': LaunchConfiguration('time_scale')}.items(),
             condition=IfCondition(enable_robots)
         )
     )
@@ -152,6 +154,11 @@ def generate_launch_description():
             'use_hardware',
             default_value='false',
             description='Toggle hardware launch instead of simulation components'
+        ),
+        DeclareLaunchArgument(
+            'time_scale',
+            default_value='1.0',
+            description='Simulation time scale (1.0=real-time, 2.0=2x speed, 0.5=half speed)'
         ),
 
         # Setup components based on field_type

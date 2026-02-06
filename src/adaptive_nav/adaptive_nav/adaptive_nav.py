@@ -16,14 +16,18 @@ Will pulbish the values for sim or actual robots based on the which is active fr
     robot_id_list: list of robot ids to listen for
 """
 
-FREQ = 10 # Frequency to publish velocity commands
+FREQ = 10.0  # Frequency to publish velocity commands
+MAX_FREQ = 10000.0  # Maximum frequency for time scaling (supports time_scale up to 1000)
+MIN_TIME_SCALE = 0.01
+MAX_TIME_SCALE = 1000.0
 JOY_FREQ = FREQ
 KV = 0.5  # Gain for computed velocity commands
 MAX_SENSOR = 100.0  # Max expected sensor value in dBm
 MIN_SENSOR = 0.0  # Min expected sensor value in dBm
 DESIRED_SENSOR = 40.0  # Desired sensor value in dBm for cross-track controller
-MAX_VEL_CLUSTER = 2.0
-MAX_VEL_ROT_CLUSTER = 0.3
+MAX_VEL_CLUSTER = 0.1
+MAX_VEL_ROT_CLUSTER = 0.1
+Z_DES = 0.6
 
 class ANNode(Node):
     def __init__(self):
@@ -33,12 +37,30 @@ class ANNode(Node):
             parameters=[
                 ('robot_id_list', ["p1", "p2", "p3", "p4", "p5"]),
                 ('sensor_msg_name', "sensor"),
+                ('time_scale', 1.0),
             ]
         )
         params = self._parameters
-        self.robot_id_list = self.get_parameter('robot_id_list').value # List of robot IDs to include in gradient calculation
+        self.robot_id_list = self.get_parameter('robot_id_list').value  # List of robot IDs to include in gradient calculation
         self.prefix = ''
         self.sensor_name = self.get_parameter('sensor_msg_name').value
+        self.time_scale = float(self.get_parameter('time_scale').value)
+
+        # Validate time_scale range
+        if not (MIN_TIME_SCALE <= self.time_scale <= MAX_TIME_SCALE):
+            self.get_logger().error(
+                f'Adaptive Nav: Invalid time_scale={self.time_scale}. '
+                f'Must be between {MIN_TIME_SCALE} and {MAX_TIME_SCALE}'
+            )
+            raise ValueError(f'time_scale out of range: {self.time_scale}')
+
+        # Warn if time_scale is very high
+        if self.time_scale > 100.0:
+            effective_freq = min(FREQ * self.time_scale, MAX_FREQ)
+            self.get_logger().warn(
+                f'⚠ Adaptive Nav: time_scale={self.time_scale} is very high. '
+                f'Update frequency: {effective_freq:.0f} Hz'
+            )
 
         self.num_robots = len(self.robot_id_list)
         self.goal = None
@@ -50,7 +72,10 @@ class ANNode(Node):
 
         self.future = [None] * len(self.robot_id_list)  # Store futures for each robot
 
-        timer_period = 1 / FREQ 
+        # Adjust timer frequency based on time_scale for smooth simulation
+        # Cap at MAX_FREQ to prevent unrealistic frequencies
+        effective_freq = min(FREQ * self.time_scale, MAX_FREQ)
+        timer_period = 1.0 / effective_freq
         self.vel_timer = self.create_timer(timer_period, self.publish_velocities_manager)
         self.enable = False
 
@@ -235,7 +260,7 @@ class ANNode(Node):
         Returns:
             Twist message with computed velocities, or None if calculation fails
         """
-        bearing = self.gradient.get_velocity(zdes=10.0)
+        bearing = self.gradient.get_velocity(zdes=Z_DES)
         if bearing is None:
             self.get_logger().warn("No bearing calculated, skipping publish.")
             return None
@@ -313,16 +338,16 @@ class ANNode(Node):
         dz_left_norm = dz_r4_r2 / comp_x_r2r4   # left side (r2→r4)
         dz_right_norm = dz_r5_r3 / comp_x_r3r5  # right side (r3→r5)
         gain_angular = (dz_right_norm - dz_left_norm) * self.gradient.mode.direction[2]
-        vel_angular = gain_angular * 3.0
+        vel_angular = gain_angular * 100.0 #* (abs(comp_x_r2r4)+abs(comp_x_r3r5))
 
         # Create velocity command message
         cmd_vel = Twist()
         cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_ROT_CLUSTER)
 
         # Normalize linear velocity to MAX_VEL_CLUSTER
-        vel_magnitude = abs(vel_x) + abs(vel_y)
+        vel_magnitude = 5*abs(vel_x) + abs(vel_y)
         if vel_magnitude > 0:
-            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x / vel_magnitude
+            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x * 5 / vel_magnitude
             cmd_vel.linear.y = MAX_VEL_CLUSTER * vel_y / vel_magnitude
         else:
             cmd_vel.linear.x = 0.0
@@ -343,9 +368,9 @@ class ANNode(Node):
         dz_r4_r2, dz_r5_r3, dz_r3_r2, dz_r5_r4 = dz_values
         gain_x, gain_y, gain_angular = gains
 
-        self.get_logger().info(f"z: r1={z_r1:.2f}, r2={z_r2:.2f}, r3={z_r3:.2f}, r4={z_r4:.2f}, r5={z_r5:.2f}")
-        self.get_logger().info(f"dz: r4-r2={dz_r4_r2:.3f}, r5-r3={dz_r5_r3:.3f}, r3-r2={dz_r3_r2:.3f}, r5-r4={dz_r5_r4:.3f}")
-        self.get_logger().info(f"gains: x={gain_x:.3f}, y={gain_y:.3f}, angular={gain_angular:.3f}")
+        self.get_logger().info(f"z: r1={z_r1:.4f}, r2={z_r2:.4f}, r3={z_r3:.4f}, r4={z_r4:.4f}, r5={z_r5:.4f}")
+        self.get_logger().info(f"dz: r4-r2={dz_r4_r2:.4f}, r5-r3={dz_r5_r3:.4f}, r3-r2={dz_r3_r2:.4f}, r5-r4={dz_r5_r4:.4f}")
+        self.get_logger().info(f"gains: x={gain_x:.4f}, y={gain_y:.4f}, angular={gain_angular:.4f}")
         self.get_logger().info(f"mode: {self.gradient.mode.value}")
 
     def publish_velocities(self):

@@ -38,8 +38,10 @@ def launch_setup(context, *args, **kwargs):
     y = float(LaunchConfiguration("y").perform(context))
     t = float(LaunchConfiguration("t").perform(context))
     alpha = float(LaunchConfiguration("a").perform(context))
+    time_scale = float(LaunchConfiguration("time_scale").perform(context))
 
     with_desired = desired == 'desired'
+    is_first_robot = (robot_id == 'p1')
 
     # Load URDF with color substitution
     robot_description = _load_urdf_with_color(pkg_share, robot_id, alpha)
@@ -67,6 +69,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{
                 'robot_id': robot_id,
                 'with_desired': with_desired,
+                'use_sim_time': LaunchConfiguration("use_sim_time"),
             }]
         ),
         # Simulation rover (differential drive)
@@ -80,7 +83,9 @@ def launch_setup(context, *args, **kwargs):
                 'x': x,
                 'y': y,
                 't': t,
-                'prefix': ''
+                'prefix': '',
+                'use_sim_time': LaunchConfiguration("use_sim_time"),
+                'time_scale': time_scale,
             }]
         ),
         # Fake sensor
@@ -93,7 +98,8 @@ def launch_setup(context, *args, **kwargs):
                 'robot_id': robot_id,
                 'prefix': '',
                 'sensor_msg_name': 'sensor',
-                'sensor_service_name': 'get_sensor'
+                'sensor_service_name': 'get_sensor',
+                'use_sim_time': LaunchConfiguration("use_sim_time"),
             }]
         ),
     ]
@@ -118,6 +124,23 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
+    # Add clock publisher (only for first robot to avoid conflicts)
+    if is_first_robot:
+        # Scale clock publish rate with time_scale, capped at 10000Hz (supports time_scale up to 1000)
+        clock_publish_rate = min(100.0 * time_scale, 10000.0)
+        main_nodes.append(
+            Node(
+                package='fake_rover_state_controller',
+                executable='clock_publisher',
+                name='clock_publisher',
+                output='screen',
+                parameters=[{
+                    'time_scale': time_scale,
+                    'publish_rate_hz': clock_publish_rate,
+                }]
+            )
+        )
+
     return main_nodes
 
 
@@ -130,6 +153,7 @@ def generate_launch_description():
         DeclareLaunchArgument("a", default_value="1.0", description="Alpha (transparency)"),
         DeclareLaunchArgument("desired", default_value="", description="Enable desired visualization"),
         DeclareLaunchArgument("use_sim_time", default_value="True", description="Flag to enable use_sim_time"),
+        DeclareLaunchArgument("time_scale", default_value="1.0", description="Simulation time scale (1.0=real-time, 2.0=2x speed)"),
 
         OpaqueFunction(function=launch_setup),
     ])

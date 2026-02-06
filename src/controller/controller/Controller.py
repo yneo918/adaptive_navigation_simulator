@@ -12,8 +12,11 @@ from gui_package.my_ros_module import PubSubManager
 from cluster_node.Cluster import Cluster, ClusterConfig, ControlMode
 
 # Constants
-FREQ = 10
-JOY_FREQ = FREQ # Frequency for joystick commands
+FREQ = 10.0
+MAX_FREQ = 10000.0  # Maximum control frequency for time scaling (supports time_scale up to 1000)
+MIN_TIME_SCALE = 0.01
+MAX_TIME_SCALE = 1000.0
+JOY_FREQ = FREQ  # Frequency for joystick commands
 KP_GAIN = 1.0  # Position gain in m/s per m error
 KV_GAIN = 0.2  # Velocity gain in m/s per m/s error
 EPSILON = 0.5  # Distance threshold to consider robot at desired position in meters
@@ -60,10 +63,11 @@ class Controller(Node):
             parameters=[
                 ('robot_id_list', ["p1", "p2", "p3"]),
                 ('cluster_size', 3),
-                ('cluster_params', [8.0, 8.0, 1.047]), 
+                ('cluster_params', [8.0, 8.0, 1.047]),
                 ('cluster_type', "TriangleatCentroid"),
                 ('control_mode', "POS"),
                 ('vel_dof', 2),
+                ('time_scale', 1.0),
             ]
         )
         self.prefix = ''
@@ -76,6 +80,23 @@ class Controller(Node):
         robot_id_list = self.get_parameter('robot_id_list').value
         self._setup_robot_lists(robot_id_list)
         self.vel_dof = self.get_parameter('vel_dof').value
+        self.time_scale = float(self.get_parameter('time_scale').value)
+
+        # Validate time_scale range
+        if not (MIN_TIME_SCALE <= self.time_scale <= MAX_TIME_SCALE):
+            self.get_logger().error(
+                f'Controller: Invalid time_scale={self.time_scale}. '
+                f'Must be between {MIN_TIME_SCALE} and {MAX_TIME_SCALE}'
+            )
+            raise ValueError(f'time_scale out of range: {self.time_scale}')
+
+        # Warn if time_scale is very high
+        if self.time_scale > 100.0:
+            effective_freq = min(FREQ * self.time_scale, MAX_FREQ)
+            self.get_logger().warn(
+                f'⚠ Controller: time_scale={self.time_scale} is very high. '
+                f'Control frequency: {effective_freq:.0f} Hz'
+            )
         
         # Validate cluster parameters
         self.cluster_params = self.get_parameter('cluster_params').value
@@ -226,7 +247,10 @@ class Controller(Node):
 
     def _start_control_loop(self):
         """Start the main control timer"""
-        timer_period = 1.0 / FREQ
+        # Adjust timer frequency based on time_scale for smooth simulation
+        # Cap at MAX_FREQ to prevent unrealistic frequencies
+        effective_freq = min(FREQ * self.time_scale, MAX_FREQ)
+        timer_period = 1.0 / effective_freq
         self.vel_timer = self.create_timer(timer_period, self._timer_callback)
 
     # Callback methods
@@ -551,6 +575,7 @@ class Controller(Node):
     def _apply_velocity_limits(self, rover_commands: List[List[float]]) -> np.ndarray:
         """Apply velocity limits to robot commands"""
         commands = np.array(rover_commands)
+        scale = []
         
         for i in range(len(commands)):
             # Limit angular velocity
@@ -558,7 +583,15 @@ class Controller(Node):
             
             # Limit linear velocity considering angular velocity
             remaining_vel = MAX_VEL - abs(commands[i][1])
-            commands[i][0] = np.clip(commands[i][0], -remaining_vel, remaining_vel)
+            scale.append(remaining_vel)
+            com = np.clip(commands[i][0], -remaining_vel, remaining_vel)
+            original = max(rover_commands[i][0], 1e-9)
+            scale.append(abs(com / original))
+
+        scale_factor = min(scale)
+        
+        for i in range(len(commands)):
+            commands[i][0] *=scale_factor
         
         return commands
 

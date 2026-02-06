@@ -26,6 +26,7 @@ setup(
             'fake_sensor = fake_rover_state_controller.fake_sensor:main',
             'tf_broadcaster = fake_rover_state_controller.tf_broadcaster:main',
             'arrow_publisher = fake_rover_state_controller.arrow_publisher:main',
+            'clock_publisher = fake_rover_state_controller.clock_publisher:main',
         ],
     },
 )

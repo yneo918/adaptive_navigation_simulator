@@ -7,6 +7,10 @@ from geometry_msgs.msg import Pose2D, Twist
 from .my_ros_module import PubSubManager
 
 UPDATE_RATE_HZ = 10.0
+MAX_UPDATE_RATE_HZ = 10000.0  # Maximum update rate for time scaling (supports time_scale up to 1000)
+TARGET_SUBSTEP_DT = 0.1  # Target substep size for integration (seconds)
+MIN_TIME_SCALE = 0.01
+MAX_TIME_SCALE = 1000.0
 MASS_KG = 10.0
 INERTIA_KGM2 = 0.75
 RESPONSE_TIME_S = 0.6
@@ -41,11 +45,33 @@ class SimRover(Node):
                 ('y', 0.0),
                 ('t', 0.0),
                 ('prefix', DEFAULT_PREFIX),
+                ('time_scale', 1.0),
             ],
         )
 
         self.robot_id = self.get_parameter('robot_id').value
         self.prefix = self.get_parameter('prefix').value
+        self.time_scale = float(self.get_parameter('time_scale').value)
+
+        # Validate time_scale range
+        if not (MIN_TIME_SCALE <= self.time_scale <= MAX_TIME_SCALE):
+            self.get_logger().error(
+                f'Robot {self.robot_id}: Invalid time_scale={self.time_scale}. '
+                f'Must be between {MIN_TIME_SCALE} and {MAX_TIME_SCALE}'
+            )
+            raise ValueError(f'time_scale out of range: {self.time_scale}')
+
+        # Warn if time_scale is very high
+        if self.time_scale > 100.0:
+            effective_rate = min(UPDATE_RATE_HZ * self.time_scale, MAX_UPDATE_RATE_HZ)
+            timer_period = 1.0 / effective_rate
+            estimated_dt = timer_period * self.time_scale
+            num_substeps = max(1, int(estimated_dt / TARGET_SUBSTEP_DT + 0.5))
+
+            self.get_logger().warn(
+                f'⚠ Robot {self.robot_id}: time_scale={self.time_scale} is very high. '
+                f'Update rate: {effective_rate:.0f} Hz, Substeps: {num_substeps}'
+            )
 
         self.position = {
             'x': float(self.get_parameter('x').value),
@@ -75,7 +101,10 @@ class SimRover(Node):
             10,
         )
 
-        timer_period = 1.0 / UPDATE_RATE_HZ
+        # Adjust timer frequency based on time_scale for smooth simulation
+        # Cap at MAX_UPDATE_RATE_HZ to prevent unrealistic frequencies
+        effective_rate = min(UPDATE_RATE_HZ * self.time_scale, MAX_UPDATE_RATE_HZ)
+        timer_period = 1.0 / effective_rate
         self.timer = self.create_timer(timer_period, self._on_timer)
 
     def _command_callback(self, msg: Twist) -> None:
@@ -112,27 +141,47 @@ class SimRover(Node):
         self._publish_pose()
 
     def _integrate_dynamics(self, dt: float) -> None:
-        linear_error = self.target_velocity['linear'] - self.current_velocity['linear']
-        force_command = MASS_KG * linear_error / RESPONSE_TIME_S
-        drag_force = -LINEAR_DRAG_COEFF * self.current_velocity['linear']
-        net_force = force_command + drag_force
-        linear_accel = _clamp(net_force / MASS_KG, -MAX_LINEAR_ACCEL, MAX_LINEAR_ACCEL)
-        self.current_velocity['linear'] += linear_accel * dt
-        self.current_velocity['linear'] = _clamp(self.current_velocity['linear'], -MAX_LINEAR_SPEED, MAX_LINEAR_SPEED)
+        """
+        Integrate robot dynamics with automatic substep subdivision.
 
-        angular_error = self.target_velocity['angular'] - self.current_velocity['angular']
-        torque_command = INERTIA_KGM2 * angular_error / ANG_RESPONSE_TIME_S
-        drag_torque = -ANGULAR_DRAG_COEFF * self.current_velocity['angular']
-        net_torque = torque_command + drag_torque
-        angular_accel = _clamp(net_torque / INERTIA_KGM2, -MAX_ANG_ACCEL, MAX_ANG_ACCEL)
-        self.current_velocity['angular'] += angular_accel * dt
-        self.current_velocity['angular'] = _clamp(self.current_velocity['angular'], -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED)
+        For large dt (e.g., high time_scale), subdivides into smaller steps
+        to maintain numerical accuracy and preserve physical response characteristics.
+        """
+        # Calculate number of substeps needed
+        num_substeps = max(1, int(dt / TARGET_SUBSTEP_DT + 0.5))
+        sub_dt = dt / num_substeps
 
-        # REP103: X+ forward, Y+ left, counter-clockwise rotation positive
-        heading_mid = self.position['theta'] + 0.5 * self.current_velocity['angular'] * dt
-        self.position['theta'] = self._wrap_to_pi(self.position['theta'] + self.current_velocity['angular'] * dt)
-        self.position['x'] += self.current_velocity['linear'] * math.cos(heading_mid) * dt
-        self.position['y'] += self.current_velocity['linear'] * math.sin(heading_mid) * dt
+        # Integrate over substeps
+        for _ in range(num_substeps):
+            # Linear dynamics
+            linear_error = self.target_velocity['linear'] - self.current_velocity['linear']
+            force_command = MASS_KG * linear_error / RESPONSE_TIME_S
+            drag_force = -LINEAR_DRAG_COEFF * self.current_velocity['linear']
+            net_force = force_command + drag_force
+            linear_accel = _clamp(net_force / MASS_KG, -MAX_LINEAR_ACCEL, MAX_LINEAR_ACCEL)
+            self.current_velocity['linear'] += linear_accel * sub_dt
+            self.current_velocity['linear'] = _clamp(
+                self.current_velocity['linear'], -MAX_LINEAR_SPEED, MAX_LINEAR_SPEED
+            )
+
+            # Angular dynamics
+            angular_error = self.target_velocity['angular'] - self.current_velocity['angular']
+            torque_command = INERTIA_KGM2 * angular_error / ANG_RESPONSE_TIME_S
+            drag_torque = -ANGULAR_DRAG_COEFF * self.current_velocity['angular']
+            net_torque = torque_command + drag_torque
+            angular_accel = _clamp(net_torque / INERTIA_KGM2, -MAX_ANG_ACCEL, MAX_ANG_ACCEL)
+            self.current_velocity['angular'] += angular_accel * sub_dt
+            self.current_velocity['angular'] = _clamp(
+                self.current_velocity['angular'], -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED
+            )
+
+            # Position update (REP103: X+ forward, Y+ left, counter-clockwise rotation positive)
+            heading_mid = self.position['theta'] + 0.5 * self.current_velocity['angular'] * sub_dt
+            self.position['theta'] = self._wrap_to_pi(
+                self.position['theta'] + self.current_velocity['angular'] * sub_dt
+            )
+            self.position['x'] += self.current_velocity['linear'] * math.cos(heading_mid) * sub_dt
+            self.position['y'] += self.current_velocity['linear'] * math.sin(heading_mid) * sub_dt
 
     def _publish_pose(self) -> None:
         pose = Pose2D()

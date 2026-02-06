@@ -26,6 +26,11 @@ def generate_launch_description():
             default_value='2',
             description='Velocity degrees of freedom (2 or 3)'
         ),
+        DeclareLaunchArgument(
+            'time_scale',
+            default_value='1.0',
+            description='Simulation time scale (1.0=real-time, 2.0=2x speed)'
+        ),
 
         # Cluster controller node
         Node(
@@ -34,7 +39,11 @@ def generate_launch_description():
             name='cluster_feedback',
             parameters=[
                 LaunchConfiguration('cluster_config'),
-                {'vel_dof': LaunchConfiguration('vel_dof')}
+                {
+                    'vel_dof': LaunchConfiguration('vel_dof'),
+                    'use_sim_time': True,
+                    'time_scale': LaunchConfiguration('time_scale'),
+                }
             ],
         ),
 
@@ -45,7 +54,11 @@ def generate_launch_description():
             name='cluster_feedback',
             parameters=[
                 LaunchConfiguration('cluster_config'),
-                {'vel_dof': LaunchConfiguration('vel_dof')}
+                {
+                    'vel_dof': LaunchConfiguration('vel_dof'),
+                    'use_sim_time': True,
+                    'time_scale': LaunchConfiguration('time_scale'),
+                }
             ],
         ),
     ])
