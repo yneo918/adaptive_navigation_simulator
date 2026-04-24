@@ -6,7 +6,7 @@ from sensor_msgs.msg import NavSatFix
 from geometry_msgs.msg import Twist
 import random
 import math
-from teleop_core.my_ros_module import PubSubManager
+from cluster_node.my_ros_module import PubSubManager
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import threading
