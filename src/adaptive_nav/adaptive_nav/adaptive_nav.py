@@ -98,7 +98,7 @@ class ANNode(Node):
                 f'{self.prefix}/{robot_id}/{self.sensor_name}',
                 lambda msg, robot_id=robot_id: self.sensor_callback(msg, robot_id),
                 5)
-        self.get_logger().info(f"Listening for robots: {self.robot_id_list}")
+        self.get_logger().debug(f"Listening for robots: {self.robot_id_list}")
 
     def pose_callback(self, msg, robot_id):
         """Update the robot's position in (x, y, z) where z is height in scalar field"""
@@ -122,7 +122,7 @@ class ANNode(Node):
                 temp = self.gradient.mode
                 self.gradient.mode = mode
                 if temp != mode:
-                    self.get_logger().info(f"Adaptive mode changed from {temp.value} to {mode.value}")
+                    self.get_logger().debug(f"Adaptive mode changed from {temp.value} to {mode.value}")
 
     def _mode_callback(self, msg: String):
         """Enable or disable adaptive navigation based on mode message."""
@@ -133,7 +133,7 @@ class ANNode(Node):
     
     def _goal_callback(self, msg: Pose2D):
         self.goal = [msg.x, msg.y, msg.theta]
-        self.get_logger().info(f"Get Goal Pose {self.goal}")
+        self.get_logger().debug(f"Get Goal Pose {self.goal}")
 
     def _compute_gain_from_Z_and_distance(self, A, B, C, Zb, Zc, ell, eps=1e-12,
                                           clamp_segment=False, epsilon_out=0.0):
@@ -265,12 +265,12 @@ class ANNode(Node):
             self.get_logger().warn("No bearing calculated, skipping publish.")
             return None
 
-        self.get_logger().info(f"Publishing bearing: {bearing}")
-        self.get_logger().info(f"Current bearing: {self.gradient.curr_bearing}")
-        self.get_logger().info(f"grad: {self.gradient.grad}")
-        self.get_logger().info(f"r1: {self.gradient.robot_positions[0]}")
-        self.get_logger().info(f"r4: {self.gradient.robot_positions[3]}")
-        self.get_logger().info(f"r5: {self.gradient.robot_positions[4]}")
+        self.get_logger().debug(f"Publishing bearing: {bearing}")
+        self.get_logger().debug(f"Current bearing: {self.gradient.curr_bearing}")
+        self.get_logger().debug(f"grad: {self.gradient.grad}")
+        self.get_logger().debug(f"r1: {self.gradient.robot_positions[0]}")
+        self.get_logger().debug(f"r4: {self.gradient.robot_positions[3]}")
+        self.get_logger().debug(f"r5: {self.gradient.robot_positions[4]}")
 
         x_unit, _ = self._compute_unit_vectors_from_AB(self._get_robot_position_2d(0), self._get_robot_position_2d(1))
 
@@ -368,10 +368,10 @@ class ANNode(Node):
         dz_r4_r2, dz_r5_r3, dz_r3_r2, dz_r5_r4 = dz_values
         gain_x, gain_y, gain_angular = gains
 
-        self.get_logger().info(f"z: r1={z_r1:.4f}, r2={z_r2:.4f}, r3={z_r3:.4f}, r4={z_r4:.4f}, r5={z_r5:.4f}")
-        self.get_logger().info(f"dz: r4-r2={dz_r4_r2:.4f}, r5-r3={dz_r5_r3:.4f}, r3-r2={dz_r3_r2:.4f}, r5-r4={dz_r5_r4:.4f}")
-        self.get_logger().info(f"gains: x={gain_x:.4f}, y={gain_y:.4f}, angular={gain_angular:.4f}")
-        self.get_logger().info(f"mode: {self.gradient.mode.value}")
+        self.get_logger().debug(f"z: r1={z_r1:.4f}, r2={z_r2:.4f}, r3={z_r3:.4f}, r4={z_r4:.4f}, r5={z_r5:.4f}")
+        self.get_logger().debug(f"dz: r4-r2={dz_r4_r2:.4f}, r5-r3={dz_r5_r3:.4f}, r3-r2={dz_r3_r2:.4f}, r5-r4={dz_r5_r4:.4f}")
+        self.get_logger().debug(f"gains: x={gain_x:.4f}, y={gain_y:.4f}, angular={gain_angular:.4f}")
+        self.get_logger().debug(f"mode: {self.gradient.mode.value}")
 
     def publish_velocities(self):
         """Compute gradient and publish velocity commands."""
@@ -387,7 +387,7 @@ class ANNode(Node):
             self.get_logger().warn(f"Unsupported num_robots: {self.gradient.mode.num_robots}")
             cmd_vel = Twist()
 
-        self.get_logger().info(f"adp ctrl {cmd_vel.linear.x}, {cmd_vel.linear.y}, {cmd_vel.angular.z}")
+        self.get_logger().debug(f"adp ctrl {cmd_vel.linear.x}, {cmd_vel.linear.y}, {cmd_vel.angular.z}")
         self.pubsub.publish('/ctrl/cmd_vel', cmd_vel)
     
     def clip(self, val, abs_max=1.0, gain=1.0):

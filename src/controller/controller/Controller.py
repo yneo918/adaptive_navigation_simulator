@@ -74,7 +74,7 @@ class Controller(Node):
         
         # Log all parameters
         for name, param in self._parameters.items():
-            self.get_logger().info(f"PARAMS/ {name}: {param.value}")
+            self.get_logger().debug(f"PARAMS/ {name}: {param.value}")
         
         # Parse and validate robot IDs
         robot_id_list = self.get_parameter('robot_id_list').value
@@ -113,7 +113,7 @@ class Controller(Node):
                 f"cluster_params must be of length {expected_param_length}, "
                 f"got {len(self.cluster_params)}"
             )
-        self.get_logger().info(
+        self.get_logger().debug(
             f"Cluster parameters initialized: {self.cluster_params}"
         )
 
@@ -132,7 +132,7 @@ class Controller(Node):
         for robot_id in self.robot_id_list:
             self.robot_status[robot_id] = RobotStatus()
         
-        self.get_logger().info(f"ROVER: {self.robot_id_list} N: {self.n_rover}")
+        self.get_logger().debug(f"ROVER: {self.robot_id_list} N: {self.n_rover}")
 
     def _initialize_cluster_data(self):
         """Initialize cluster-related data structures"""
@@ -152,7 +152,7 @@ class Controller(Node):
                 kv_gains=[KV_GAIN] * (self.cluster_size * ROVER_DOF),
                 control_mode=self.control_mode
             )
-            self.get_logger().info(f"Cluster setup with type: {self.cluster_type}")
+            self.get_logger().debug(f"Cluster setup with type: {self.cluster_type}")
         except Exception as e:
             self.get_logger().error(f"Failed to create cluster: {e}")
         
@@ -164,7 +164,7 @@ class Controller(Node):
         self.enable = False
         self.ctrl_timestamp: Optional[float] = None
         
-        self.get_logger().info(f"Cluster initialized with size: {self.cluster_size}")
+        self.get_logger().debug(f"Cluster initialized with size: {self.cluster_size}")
 
     def _initialize_cluster_arrays(self):
         """Initialize numpy arrays for cluster calculations"""
@@ -202,7 +202,7 @@ class Controller(Node):
         # Robot-specific topics
         self._create_robot_topics()
         
-        self.get_logger().info(f"Listening for robots: {self.robot_id_list}")
+        self.get_logger().debug(f"Listening for robots: {self.robot_id_list}")
 
     def _create_global_subscriptions(self):
         """Create global topic subscriptions"""
@@ -319,7 +319,7 @@ class Controller(Node):
                         self.c_des[2, 0] += v_r / freq
                         self.c_des[2, 0] = self._wrap_to_pi(self.c_des[2, 0])
                         
-                        #self.get_logger().info(f"Cluster desired position: {self.c_des.flatten()}")
+                        #self.get_logger().debug(f"Cluster desired position: {self.c_des.flatten()}")
                 elif self.cluster.control_mode == ControlMode.VELOCITY:
                     x = msg.linear.x
                     y = msg.linear.y
@@ -330,18 +330,18 @@ class Controller(Node):
                     self.cdot_des[0, 0] = x * ct - y * st  # world X
                     self.cdot_des[1, 0] = x * st + y * ct  # world Y
                     self.cdot_des[2, 0] = msg.angular.z
-                    self.get_logger().info(f"msgs: {x}, {y}, {t} / cur_t :{self.c[2]}")
-                    self.get_logger().info(f"cdot_des: {self.cdot_des[0, 0]}, {self.cdot_des[1, 0]}, {self.cdot_des[2, 0]}")
+                    self.get_logger().debug(f"msgs: {x}, {y}, {t} / cur_t :{self.c[2]}")
+                    self.get_logger().debug(f"cdot_des: {self.cdot_des[0, 0]}, {self.cdot_des[1, 0]}, {self.cdot_des[2, 0]}")
             except Exception as e:
                 self.get_logger().error(f"Error in _cmd_callback: {e}")
 
     def _cluster_params_callback(self, msg: Float32MultiArray):
         """Update cluster formation parameters"""
-        self.get_logger().info(f"Received cluster parameters: {msg.data}")
+        self.get_logger().debug(f"Received cluster parameters: {msg.data}")
         
         # Check for reset command (all negative values)
         if all(param < 0.0 for param in msg.data[:3]):
-            self.get_logger().info("Resetting cluster parameters")
+            self.get_logger().debug("Resetting cluster parameters")
             self._reset_cluster_desired_position()
             return
         
@@ -354,7 +354,7 @@ class Controller(Node):
 
     def _cluster_desired_callback(self, msg: Float32MultiArray):
         """Update desired cluster position"""
-        #self.get_logger().info(f"Received cluster desired position: {msg.data}")
+        #self.get_logger().debug(f"Received cluster desired position: {msg.data}")
         
         data_length = len(msg.data)
         self.c_des[0:data_length] = np.reshape(msg.data, (data_length, 1))
@@ -377,7 +377,7 @@ class Controller(Node):
             if len(self.registered_robots) == self.cluster_size:
                 break
         
-        self.get_logger().info(
+        self.get_logger().debug(
             f"Formed cluster with robots: {self.registered_robots}"
         )
 
@@ -466,8 +466,8 @@ class Controller(Node):
             robot_positions = np.array(positions, dtype=np.float64).reshape((self.cluster_size * ROVER_DOF, 1))
             robot_velocities = np.array(velocities, dtype=np.float64).reshape((self.cluster_size * ROVER_DOF, 1))
             
-            #self.get_logger().info(f"Robot positions shape: {robot_positions.shape}")
-            #self.get_logger().info(f"Robot velocities shape: {robot_velocities.shape}")
+            #self.get_logger().debug(f"Robot positions shape: {robot_positions.shape}")
+            #self.get_logger().debug(f"Robot velocities shape: {robot_velocities.shape}")
             
             return robot_positions, robot_velocities
             
@@ -488,7 +488,7 @@ class Controller(Node):
             y_vel = float(rdot_des[i * ROVER_DOF + 1, 0])
             current_theta = robot_positions[i * ROVER_DOF + 2, 0]
             
-            self.get_logger().info(f"p{i+1}")
+            self.get_logger().debug(f"p{i+1}")
             if self.vel_dof == 2:
                 linear_cmd, angular_cmd = self._compute_robot_command(
                     x_vel, y_vel, current_theta
@@ -515,12 +515,12 @@ class Controller(Node):
                 topic = f"{self.prefix}/{robot_id}/cmd_vel"
                 self.pubsub.publish(topic, vel_msg)
                 if self.vel_dof == 2:
-                    self.get_logger().info(
+                    self.get_logger().debug(
                         f"Robot {i} velocity[{topic}]: "
                         f"linear={vel_msg.linear.x:.3f}, angular={vel_msg.angular.z:.3f}"
                     )
                 elif self.vel_dof == 3:
-                    self.get_logger().info(
+                    self.get_logger().debug(
                         f"Robot {i} velocity[{topic}]: "
                         f"x={vel_msg.linear.x:.3f}, y={vel_msg.linear.y:.3f}, angular={vel_msg.angular.z:.3f}"
                     )
@@ -548,7 +548,7 @@ class Controller(Node):
             if(angular_error > np.pi):
                 angular_error = angular_error - 2*np.pi
             
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"x_vel={x_vel:.3f}, y_vel={y_vel:.3f}, "
                 f"current_theta={current_theta:.3f}, desired_angle={desired_angle:.3f}"
             )
@@ -557,14 +557,14 @@ class Controller(Node):
             if(abs(angular_error) < math.pi / 2):
                 linear_vel = translation_magnitude * math.cos(abs(angular_error))
                 angular_vel = angular_error
-                #self.get_logger().info(f"Angular error small going forward {angular_error} with velocities {linear_vel}, {angular_vel}")
+                #self.get_logger().debug(f"Angular error small going forward {angular_error} with velocities {linear_vel}, {angular_vel}")
             else:
                 # Move backward if angle error is large
-                #self.get_logger().info(f"Angular error too large {angular_error}")
+                #self.get_logger().debug(f"Angular error too large {angular_error}")
                 corrected_error = self._wrap_to_pi(math.pi - angular_error)
                 linear_vel = -translation_magnitude * math.cos(abs(corrected_error))
                 angular_vel = -corrected_error
-            self.get_logger().info(
+            self.get_logger().debug(
                 f"v_t={linear_vel:.3f}, v_r={angular_vel:.3f}"
             )
             
@@ -615,8 +615,8 @@ class Controller(Node):
                 self.get_logger().warn("get_desired_position returned None")
                 return
                 
-            #self.get_logger().info(f"Desired positions shape: {desired_positions.shape}")
-            #self.get_logger().info(f"Desired positions: {desired_positions.flatten()}")
+            #self.get_logger().debug(f"Desired positions shape: {desired_positions.shape}")
+            #self.get_logger().debug(f"Desired positions: {desired_positions.flatten()}")
             
             for i, robot_id in enumerate(cluster_robots):
                 pose_msg = Pose2D()
@@ -631,7 +631,7 @@ class Controller(Node):
                     pose_msg.y = float(desired_positions[start_idx + 1])
                     pose_msg.theta = float(desired_positions[start_idx + 2])
                 
-                #self.get_logger().info(
+                #self.get_logger().debug(
                 #    f"Publishing desired pose for {robot_id}: "
                 #    f"x={pose_msg.x:.3f}, y={pose_msg.y:.3f}, theta={pose_msg.theta:.3f}"
                 #)
