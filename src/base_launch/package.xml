@@ -16,7 +16,6 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>rf_sim</exec_depend>
   <exec_depend>sim_launch</exec_depend>
-  <exec_depend>teleop_core</exec_depend>
   <exec_depend>virtual_joy</exec_depend>
   <exec_depend>rover_description</exec_depend>
 

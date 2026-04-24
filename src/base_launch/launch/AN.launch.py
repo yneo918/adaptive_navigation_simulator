@@ -34,19 +34,9 @@ def generate_launch_description():
         get_package_share_directory('sim_launch'),
         'pioneer_with_hw_desired.launch.py',
     )
-    teleop_config_dir = os.path.join(
-        get_package_share_directory('teleop_core'),
-        'config',
-    )
-    demux_config = os.path.join(teleop_config_dir, 'demux.yaml')
-    joy_assign_config = os.path.join(teleop_config_dir, 'joy-assign.yaml')
 
     if not os.path.isfile(cluster_file):
         raise FileNotFoundError(f"Parameter file not found: {cluster_file}")
-    if not os.path.isfile(demux_config):
-        raise FileNotFoundError(f"Parameter file not found: {demux_config}")
-    if not os.path.isfile(joy_assign_config):
-        raise FileNotFoundError(f"Parameter file not found: {joy_assign_config}")
 
     use_hardware = LaunchConfiguration('use_hardware')
 
@@ -76,16 +66,6 @@ def generate_launch_description():
         Node(
             package='virtual_joy',
             executable='virtual_joy',
-        ),
-        Node(
-            package='teleop_core',
-            executable='cmd_demux',
-            parameters=[demux_config],
-        ),
-        Node(
-            package='teleop_core',
-            executable='joywithgui3',
-            parameters=[joy_assign_config],
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(display_launch_file),

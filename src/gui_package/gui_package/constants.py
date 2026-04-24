@@ -1,4 +1,4 @@
-"""Constants and configuration for teleop_core package."""
+"""Constants and configuration for gui_package."""
 
 from enum import Enum
 

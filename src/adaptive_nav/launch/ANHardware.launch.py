@@ -46,16 +46,6 @@ def generate_launch_description():
             package="virtual_joy",
             executable="virtual_joy",
         ),
-        Node(
-        package="teleop_core",
-        executable="cmd_demux",
-        parameters=["pioneer_base/teleop_core/config/demux.yaml"],
-        ),
-        Node(
-        package="teleop_core",
-        executable="joywithgui3",
-        parameters=["pioneer_base/teleop_core/config/joy-assign.yaml"],
-        ),   
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(display_launch_file),
             launch_arguments={'rvizconfig': custom_rviz_config}.items()
