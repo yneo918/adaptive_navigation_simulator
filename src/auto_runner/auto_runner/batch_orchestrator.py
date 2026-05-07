@@ -33,7 +33,7 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose2D
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, Float64
 
 
 PLOTTER_OUTPUT_DIR = '/tmp/auto_runner_plotter'
@@ -54,8 +54,21 @@ class Orchestrator(Node):
         self.create_subscription(
             Pose2D, '/p1/pose2D', self._on_leader_pose, 10)
 
+        # Out-of-area detection: track latest sensor reading per robot
+        self._robot_z = {f'p{i}': None for i in range(1, 6)}
+        self._oob_streak = 0
+        for i in range(1, 6):
+            rid = f'p{i}'
+            self.create_subscription(
+                Float64, f'/{rid}/sensor',
+                lambda msg, r=rid: self._on_robot_sensor(msg, r),
+                10)
+
     def _on_leader_pose(self, msg: Pose2D):
         self._leader_xy = (msg.x, msg.y)
+
+    def _on_robot_sensor(self, msg: Float64, robot_id: str):
+        self._robot_z[robot_id] = float(msg.data)
 
     def wait_for_leader(self, timeout_s: float = 30.0) -> bool:
         deadline = time.time() + timeout_s
@@ -66,10 +79,27 @@ class Orchestrator(Node):
     def reset_history(self):
         self._leader_history.clear()
         self._leader_xy = None
+        self._oob_streak = 0
+        for k in self._robot_z:
+            self._robot_z[k] = None
 
     def push_history(self):
         if self._leader_xy is not None:
             self._leader_history.append(self._leader_xy)
+
+    def push_oob_check(self, threshold: float) -> int:
+        """Update out-of-area streak counter. Returns current streak.
+
+        Out-of-area: ALL 5 robots have sensor z < threshold simultaneously.
+        Streak increments per call when condition holds; resets otherwise.
+        """
+        if any(z is None for z in self._robot_z.values()):
+            return self._oob_streak  # not all robots reporting yet
+        if max(self._robot_z.values()) < threshold:
+            self._oob_streak += 1
+        else:
+            self._oob_streak = 0
+        return self._oob_streak
 
 
 def import_yaml(path: str) -> dict:
@@ -153,6 +183,13 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
             if span < eps:
                 return True, f'plateau (span={span:.3f} < {eps})'
 
+    # Out-of-area: all 5 robots below sensor threshold for sustained period
+    oob_win = expt.get('oob_window_steps', defaults['oob_window_steps'])
+    if orch._oob_streak >= oob_win:
+        thr = expt.get('oob_threshold', defaults['oob_threshold'])
+        return True, (f'out-of-area (all robots z<{thr} '
+                      f'for {orch._oob_streak} steps)')
+
     return False, ''
 
 
@@ -227,6 +264,8 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         # Sample at the same interval as the plotter so step_count tracks NPZ rows
         if time.time() - last_sample_t >= sample_interval:
             orch.push_history()
+            oob_thr = expt.get('oob_threshold', defaults['oob_threshold'])
+            orch.push_oob_check(oob_thr)
             step_count += 1
             last_sample_t = time.time()
 

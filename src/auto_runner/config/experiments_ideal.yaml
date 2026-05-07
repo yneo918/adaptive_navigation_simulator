@@ -1,22 +1,25 @@
-# Ideal-condition per-mode performance evaluation.
+# Ideal-condition per-mode performance evaluation (50 runs).
 #
-# Goal: showcase the BEST performance each AN primitive can achieve when
-# the cluster aperture (d) is matched to the local feature scale of the
-# Fukushima cesium-137 field, and the starting position permits the
-# primitive's intended convergence behavior.
+# Goal: showcase each AN primitive's best achievable performance with
+# aperture matched to the local feature scale of the cesium-137 field
+# and starting positions that permit ideal navigation.
 #
-# Aperture selection is driven by terrain knowledge (cesium grid 250 m,
-# typical plume widths 3-5 km, inter-plume corridors 5-10 km), not by
-# being swept. The "how to obtain such d in a real deployment" question
-# is intentionally deferred to Future Work.
+# Aperture (d) is FIXED per mode (not swept). The "how to obtain such d
+# in unknown environments" question is deferred to Future Work. Position
+# selection uses terrain knowledge to give each mode a meaningful run.
 #
-# Coordinate system (sim coords):
+# Per-mode plan: 10 runs x 5 modes = 50 runs.
+#
+# Termination per run (OR):
+#   - max_steps reached (5000 default, 2x of best CT D1 ~2373 steps)
+#   - convergence (leader position plateau, disabled for CROSSTRACK)
+#   - out-of-area (ALL 5 robots have sensor z < 0.12 for >= 50 steps)
+#   - time_limit_s (1800 s safety cap)
+#
+# Coordinate system:
 #   sim origin: (37.480654N, 140.881685E), distance_scale=0.05
 #   FDNPP sim:  (667.0, -331.1)
-#   d in GUI vs real: d_gui = d_real_m * 0.05 (e.g., 150 -> 3000 m real)
-#
-# Modes covered: MAX, MIN, CROSSTRACK_CW (3 z_des levels), RIDGE_DOWN, TRENCH_UP
-# Total: 15 runs (5 modes x 3 starts).
+#   d (GUI units): d_real_m = d * 20
 
 defaults:
   trajectory_sample_interval: 5.0
@@ -24,143 +27,305 @@ defaults:
   time_limit_s: 1800
   plateau_eps: 0.5
   plateau_window_steps: 200
+  oob_threshold: 0.12              # sensor z floor (= ~10^4 Bq/m^2)
+  oob_window_steps: 50             # ~250 s of all-robots-out
   warmup_s: 5.0
   cooldown_s: 2.0
 
 experiments:
   # ============================================================
-  # MAX (gradient ascent) -- d=150 (3000 m real)
-  # Aperture chosen to span typical Fukushima plume width (~3-5 km),
-  # smoothing local IDW noise so gradient points to the dominant maximum.
+  # MAX (gradient ascent), d=150 (3000 m real)
+  # Starts: moderate distance from a maximum with a usable gradient.
   # ============================================================
-  - id: G1_MAX_d150
+  - id: G01_MAX_d150
     mode: MAX
     d: 150.0
-    start: {x: -1950.0, y: 1263.0, theta: 0.0}   # NW far, on main plume axis
-    max_steps: 2500
+    start: {x: -1950.0, y: 1263.0, theta: 0.0}
     output_subdir: IDEAL/MAX
-
-  - id: G2_MAX_d150
+  - id: G02_MAX_d150
     mode: MAX
     d: 150.0
-    start: {x: 1167.0, y: 469.0, theta: 0.0}     # E (sea-side) ascending inland
-    max_steps: 2500
+    start: {x: -833.0, y: 669.0, theta: 0.0}
     output_subdir: IDEAL/MAX
-
-  - id: G3_MAX_d150
+  - id: G03_MAX_d150
     mode: MAX
     d: 150.0
-    start: {x: -450.0, y: -831.0, theta: 0.0}    # S, via secondary plume
-    max_steps: 2500
+    start: {x: -1500.0, y: 200.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G04_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -200.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G05_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -450.0, y: -500.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G06_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: 200.0, y: 600.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G07_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -2000.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G08_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -1300.0, y: -800.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G09_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    output_subdir: IDEAL/MAX
+  - id: G10_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -800.0, y: 1000.0, theta: 0.0}
     output_subdir: IDEAL/MAX
 
   # ============================================================
-  # MIN (gradient descent) -- d=75 (1500 m real)
-  # Aperture chosen to be larger than IDW noise scale yet small enough
-  # to enter low-deposition pockets without averaging across plumes.
+  # MIN (gradient descent), d=75 (1500 m real)
+  # Starts: high-deposition area so descent has somewhere to go.
   # ============================================================
-  - id: H1_MIN_d75
+  - id: H01_MIN_d75
     mode: MIN
     d: 75.0
-    start: {x: 367.0, y: 169.0, theta: 0.0}      # near-FDNPP high-dose -> westward descent
-    max_steps: 1500
+    start: {x: 367.0, y: 169.0, theta: 0.0}
     output_subdir: IDEAL/MIN
-
-  - id: H2_MIN_d75
+  - id: H02_MIN_d75
     mode: MIN
     d: 75.0
-    start: {x: -833.0, y: -331.0, theta: 0.0}    # main-plume W edge -> low-dose W
-    max_steps: 1500
+    start: {x: 478.0, y: -321.0, theta: 0.0}
     output_subdir: IDEAL/MIN
-
-  - id: H3_MIN_d75
+  - id: H03_MIN_d75
     mode: MIN
     d: 75.0
-    start: {x: -1133.0, y: 869.0, theta: 0.0}    # NW plume periphery -> N corridor
-    max_steps: 1500
+    start: {x: -100.0, y: 400.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H04_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: 300.0, y: 200.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H05_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -300.0, y: 600.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H06_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: 100.0, y: -200.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H07_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -200.0, y: 500.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H08_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -600.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H09_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: 500.0, y: 100.0, theta: 0.0}
+    output_subdir: IDEAL/MIN
+  - id: H10_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -500.0, y: 200.0, theta: 0.0}
     output_subdir: IDEAL/MIN
 
   # ============================================================
-  # CROSSTRACK_CW (contour following) -- d=10 (200 m real)
-  # Aperture matched to the cesium grid spacing (~250 m) for maximum
-  # contour-tracking fidelity. Three z_des levels exercise low/mid/high
-  # deposition regimes.
+  # CROSSTRACK_CW, d=10 (200 m real), z_des=0.6 (~483 kBq/m^2)
+  # Matches the proven CROSSTRACK setup (Expt 3a/D1). Starts: near
+  # or crossing the target contour.
   # ============================================================
-  - id: I1_CT_d10_z03
+  - id: I01_CT_d10
     mode: CROSSTRACK_CW
     d: 10.0
-    z_des: 0.3                                    # ~26 kBq/m^2, low contour
-    start: {x: -2000.0, y: 600.0, theta: 0.0}     # near low-dose contour, NW
-    max_steps: 2500
-    disable_plateau: true                         # CT orbits a contour
-    output_subdir: IDEAL/CT_low
-
-  - id: I2_CT_d10_z05
-    mode: CROSSTRACK_CW
-    d: 10.0
-    z_des: 0.5                                    # ~195 kBq/m^2, mid contour
-    start: {x: -700.0, y: 800.0, theta: 0.0}      # near mid-dose contour
-    max_steps: 2500
+    z_des: 0.6
+    start: {x: 627.0, y: -742.0, theta: 0.0}
     disable_plateau: true
-    output_subdir: IDEAL/CT_mid
-
-  - id: I3_CT_d10_z075
+    output_subdir: IDEAL/CT
+  - id: I02_CT_d10
     mode: CROSSTRACK_CW
     d: 10.0
-    z_des: 0.75                                   # ~1 MBq/m^2, high contour
-    start: {x: 300.0, y: 200.0, theta: 0.0}       # near high-dose contour, near FDNPP
-    max_steps: 2500
+    z_des: 0.6
+    start: {x: -800.0, y: 400.0, theta: 0.0}
     disable_plateau: true
-    output_subdir: IDEAL/CT_high
+    output_subdir: IDEAL/CT
+  - id: I03_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: 50.0, y: 100.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I04_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -1000.0, y: 600.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I05_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: 200.0, y: 800.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I06_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -200.0, y: -600.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I07_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -1500.0, y: 300.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I08_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: 700.0, y: -500.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I09_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -500.0, y: 1000.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
+  - id: I10_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: 300.0, y: -1000.0, theta: 0.0}
+    disable_plateau: true
+    output_subdir: IDEAL/CT
 
   # ============================================================
-  # RIDGE_DOWN (descend along ridge crest) -- d=150 (3000 m real)
-  # Aperture matched to plume cross-section width (~3 km). Lateral
-  # sensors span the ridge sufficiently for centering.
+  # RIDGE_DOWN, d=150 (3000 m real)
+  # Starts: near identifiable plume ridge crests.
   # ============================================================
-  - id: J1_RIDGE_d150
+  - id: J01_RIDGE_d150
     mode: RIDGE_DOWN
     d: 150.0
-    start: {x: 528.0, y: -447.0, theta: 0.0}      # NW main ridge from FDNPP
-    max_steps: 2000
+    start: {x: 528.0, y: -447.0, theta: 0.0}
     output_subdir: IDEAL/RIDGE
-
-  - id: J2_RIDGE_d150
+  - id: J02_RIDGE_d150
     mode: RIDGE_DOWN
     d: 150.0
-    start: {x: -100.0, y: 800.0, theta: 0.0}      # NW ridge, distal segment
-    max_steps: 2000
+    start: {x: -100.0, y: 800.0, theta: 0.0}
     output_subdir: IDEAL/RIDGE
-
-  - id: J3_RIDGE_d150
+  - id: J03_RIDGE_d150
     mode: RIDGE_DOWN
     d: 150.0
-    start: {x: 200.0, y: -1200.0, theta: 0.0}     # S secondary plume ridge
-    max_steps: 2000
+    start: {x: 200.0, y: -1200.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J04_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -300.0, y: 500.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J05_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J06_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -500.0, y: 1100.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J07_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J08_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: 100.0, y: 500.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J09_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -700.0, y: 1300.0, theta: 0.0}
+    output_subdir: IDEAL/RIDGE
+  - id: J10_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -200.0, y: -800.0, theta: 0.0}
     output_subdir: IDEAL/RIDGE
 
   # ============================================================
-  # TRENCH_UP (ascend along trench floor) -- d=200 (4000 m real)
-  # Aperture matched to inter-plume corridor width (5-10 km), large
-  # enough to span the trench cross-section without bridging plumes.
+  # TRENCH_UP, d=200 (4000 m real)
+  # Starts: inter-plume corridors with low deposition surrounded by
+  # higher-deposition lobes.
   # ============================================================
-  - id: K1_TRENCH_d200
+  - id: K01_TRENCH_d200
     mode: TRENCH_UP
     d: 200.0
-    start: {x: -2333.0, y: -1331.0, theta: 0.0}   # NW vs S inter-plume corridor
-    max_steps: 3000
+    start: {x: -226.0, y: 1361.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
-
-  - id: K2_TRENCH_d200
+  - id: K02_TRENCH_d200
     mode: TRENCH_UP
     d: 200.0
-    start: {x: -3500.0, y: 200.0, theta: 0.0}     # W broad corridor (mountain shadow)
-    max_steps: 3000
+    start: {x: -2333.0, y: -1331.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
-
-  - id: K3_TRENCH_d200
+  - id: K03_TRENCH_d200
     mode: TRENCH_UP
     d: 200.0
-    start: {x: -1000.0, y: -1800.0, theta: 0.0}   # S plume southern-edge corridor
-    max_steps: 3000
+    start: {x: -3500.0, y: 200.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K04_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -1000.0, y: -1800.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K05_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -3000.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K06_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -1800.0, y: -800.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K07_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -2500.0, y: 1200.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K08_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -1500.0, y: 1500.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K09_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -2000.0, y: -200.0, theta: 0.0}
+    output_subdir: IDEAL/TRENCH
+  - id: K10_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -3200.0, y: -500.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
