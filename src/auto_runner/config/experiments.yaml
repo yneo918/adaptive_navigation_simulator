@@ -1,0 +1,83 @@
+# Batch experiment configuration for auto_runner.
+#
+# Coordinate notes (from ADDITIONAL_EXPERIMENTS.md):
+#   sim origin: (37.480654N, 140.881685E)
+#   FDNPP sim:  (667.0, -331.1)
+#   distance_scale = 0.05 (sim = real_m * 0.05)
+#   d in GUI: d=10 -> 200 m real, d=100 -> 2000 m real
+#
+# Each entry produces one trajectory NPZ saved into output_subdir.
+# Initial pose is published to /rviz/pose2D (cluster leader pose, sim coords).
+#
+# Termination: any of (max_steps reached, plateau detected, time_limit_s).
+#   plateau: leader displacement < plateau_eps in last plateau_window_steps.
+#
+# Modes (must match adaptive_nav.ScalarGradient.ControlMode):
+#   MAX, MIN, CONTOUR_CW, CONTOUR_CCW, CROSSTRACK_CW, CROSSTRACK_CCW,
+#   RIDGE_UP, RIDGE_DOWN, TRENCH_UP, TRENCH_DOWN
+
+defaults:
+  trajectory_sample_interval: 5.0   # seconds, matches existing dataset
+  max_steps: 5000
+  time_limit_s: 1800                # 30 min wall-clock safety
+  plateau_eps: 0.5                  # sim-coord units (~10 m real)
+  plateau_window_steps: 200
+  warmup_s: 5.0                     # wait after spawn before /auto/start
+  cooldown_s: 2.0                   # wait after stop before SIGINT plotter
+
+experiments:
+  - id: B1_MAX_d10
+    mode: MAX
+    d: 10.0                         # GUI units (sim = 10, real = 200 m)
+    start: {x: -3333.0, y: -1081.0, theta: 0.0}
+    max_steps: 1000
+    output_subdir: ADD/MAX10
+
+  - id: B2_MAX_d100
+    mode: MAX
+    d: 100.0
+    start: {x: -3333.0, y: -1081.0, theta: 0.0}
+    max_steps: 2000
+    output_subdir: ADD/MAX100
+
+  - id: C1_MAX_d10
+    mode: MAX
+    d: 10.0
+    start: {x: -1333.0, y: -1831.0, theta: 0.0}
+    max_steps: 1000
+    output_subdir: ADD/MAX10
+
+  - id: C2_MAX_d100
+    mode: MAX
+    d: 100.0
+    start: {x: -1333.0, y: -1831.0, theta: 0.0}
+    max_steps: 2000
+    output_subdir: ADD/MAX100
+
+  - id: D1_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    start: {x: 50.0, y: 100.0, theta: 0.0}
+    max_steps: 3000
+    output_subdir: ADD/CT_CW10
+
+  - id: D2_CT_d10
+    mode: CROSSTRACK_CW
+    d: 10.0
+    start: {x: -800.0, y: 400.0, theta: 0.0}
+    max_steps: 3000
+    output_subdir: ADD/CT_CW10
+
+  - id: E1_RIDGE_d100
+    mode: RIDGE_DOWN
+    d: 100.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    max_steps: 1500
+    output_subdir: ADD/RIDGE100
+
+  - id: F1_TRENCH_d100
+    mode: TRENCH_UP
+    d: 100.0
+    start: {x: -2333.0, y: -1331.0, theta: 0.0}
+    max_steps: 3000
+    output_subdir: ADD/TRENCH100
