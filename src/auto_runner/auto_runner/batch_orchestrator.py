@@ -259,6 +259,8 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     # 6. Main loop: monitor termination
     step_count = 0
     last_sample_t = time.time()
+    progress_every = expt.get('progress_every_steps',
+                              defaults.get('progress_every_steps', 20))
     while True:
         rclpy.spin_once(orch, timeout_sec=0.05)
         # Sample at the same interval as the plotter so step_count tracks NPZ rows
@@ -268,6 +270,25 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
             orch.push_oob_check(oob_thr)
             step_count += 1
             last_sample_t = time.time()
+
+            # Periodic progress line so long runs are not silent
+            if progress_every > 0 and step_count % progress_every == 0:
+                lx, ly = orch._leader_xy if orch._leader_xy else (0.0, 0.0)
+                z_vals = [v for v in orch._robot_z.values() if v is not None]
+                z_c = (sum(z_vals) / len(z_vals)) if z_vals else float('nan')
+                z_max = max(z_vals) if z_vals else float('nan')
+                # Leader displacement over plateau window for convergence sense
+                hist = list(orch._leader_history)[-defaults['plateau_window_steps']:]
+                if len(hist) >= 2:
+                    xs = [p[0] for p in hist]
+                    ys = [p[1] for p in hist]
+                    span = max(max(xs) - min(xs), max(ys) - min(ys))
+                else:
+                    span = float('nan')
+                print(f'[{eid}] step={step_count:>4} '
+                      f'leader=({lx:>7.1f},{ly:>7.1f}) '
+                      f'z_c={z_c:.3f} z_max={z_max:.3f} '
+                      f'span={span:.2f} oob_streak={orch._oob_streak}')
 
         terminate, reason = check_termination(
             orch, expt, defaults, step_count, t_started)
