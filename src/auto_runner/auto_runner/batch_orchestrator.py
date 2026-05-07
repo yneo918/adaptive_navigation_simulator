@@ -142,15 +142,16 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
     if time.time() - t_started >= time_limit:
         return True, f'time_limit={time_limit}s'
 
-    win = expt.get('plateau_window_steps', defaults['plateau_window_steps'])
-    eps = expt.get('plateau_eps', defaults['plateau_eps'])
-    if len(orch._leader_history) >= win:
-        recent = list(orch._leader_history)[-win:]
-        xs = [p[0] for p in recent]
-        ys = [p[1] for p in recent]
-        span = max(max(xs) - min(xs), max(ys) - min(ys))
-        if span < eps:
-            return True, f'plateau (span={span:.3f} < {eps})'
+    if not expt.get('disable_plateau', defaults.get('disable_plateau', False)):
+        win = expt.get('plateau_window_steps', defaults['plateau_window_steps'])
+        eps = expt.get('plateau_eps', defaults['plateau_eps'])
+        if len(orch._leader_history) >= win:
+            recent = list(orch._leader_history)[-win:]
+            xs = [p[0] for p in recent]
+            ys = [p[1] for p in recent]
+            span = max(max(xs) - min(xs), max(ys) - min(ys))
+            if span < eps:
+                return True, f'plateau (span={span:.3f} < {eps})'
 
     return False, ''
 
@@ -173,8 +174,14 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     # 1. Configure headless controller
     cfg = {'d': d, 'adaptive_mode': mode}
+    if 'z_des' in expt:
+        cfg['z_des'] = float(expt['z_des'])
     orch.config_pub.publish(String(data=__import__('json').dumps(cfg)))
     rclpy.spin_once(orch, timeout_sec=0.1)
+    # Publish twice to ensure the late subscribers receive it
+    for _ in range(3):
+        rclpy.spin_once(orch, timeout_sec=0.1)
+    orch.config_pub.publish(String(data=__import__('json').dumps(cfg)))
 
     # 2. Spawn the trajectory plotter
     shutil.rmtree(PLOTTER_OUTPUT_DIR, ignore_errors=True)
@@ -281,8 +288,12 @@ def main(argv=None):
 
     print(f'Plan: {len(experiments)} experiments')
     for e in experiments:
-        print(f"  {e['id']:20s} {e['mode']:14s} d={e['d']:>5} "
-              f"start=({e['start']['x']},{e['start']['y']})")
+        zdes = f" z_des={e['z_des']}" if 'z_des' in e else ''
+        plateau = ' [no-plateau]' if e.get('disable_plateau') else ''
+        print(f"  {e['id']:20s} {e['mode']:14s} d={e['d']:>6} "
+              f"start=({e['start']['x']:>7.0f},{e['start']['y']:>7.0f}) "
+              f"max_steps={e.get('max_steps', defaults['max_steps']):>4}"
+              f"{zdes}{plateau}")
     if args.dry_run:
         return 0
 

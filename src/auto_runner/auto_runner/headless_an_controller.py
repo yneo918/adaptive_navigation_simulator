@@ -22,7 +22,7 @@ import sympy as sp
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose2D
-from std_msgs.msg import Bool, Int16, String, Float32MultiArray
+from std_msgs.msg import Bool, Int16, String, Float32MultiArray, Float64
 
 from gui_package.my_ros_module import PubSubManager
 from adaptive_nav.ScalarGradient import ControlMode
@@ -51,6 +51,7 @@ class HeadlessANController(Node):
         self.cluster_mode = 'NEUTRAL'
         self.adaptive_mode = ControlMode.MAX.value
         self.select = 1
+        self.z_des = 0.6  # CROSSTRACK target contour value
 
         self.pubsub = PubSubManager(self)
         self._setup_publishers()
@@ -67,6 +68,7 @@ class HeadlessANController(Node):
         self.pubsub.create_publisher(String, '/ctrl/adaptive_mode', LOW_QOS)
         self.pubsub.create_publisher(
             Float32MultiArray, '/ctrl/cluster_params', DEFAULT_QOS)
+        self.pubsub.create_publisher(Float64, '/ctrl/z_des', DEFAULT_QOS)
         for i in range(1, N_ROVER + 1):
             self.pubsub.create_publisher(Pose2D, f'/p{i}/set_pose2D', 10)
 
@@ -106,6 +108,8 @@ class HeadlessANController(Node):
         self.pubsub.publish('/ctrl/enable', Bool(data=self.enable))
         # Cluster params (publish continuously so latecomers get them)
         self._publish_cluster_params()
+        # z_des (publish continuously so adaptive_nav stays in sync)
+        self.pubsub.publish('/ctrl/z_des', Float64(data=self.z_des))
 
     def _config_callback(self, msg: String):
         """Update configuration from JSON string."""
@@ -134,6 +138,10 @@ class HeadlessANController(Node):
         if 'cluster_mode' in cfg:
             self.cluster_mode = cfg['cluster_mode']
             self.get_logger().info(f'  cluster_mode set to {self.cluster_mode}')
+        if 'z_des' in cfg:
+            self.z_des = float(cfg['z_des'])
+            self.get_logger().info(f'  z_des set to {self.z_des}')
+            self.pubsub.publish('/ctrl/z_des', Float64(data=self.z_des))
 
         # Publish params immediately so the cluster controller picks up the new d.
         self._publish_cluster_params()

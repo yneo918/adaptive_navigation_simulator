@@ -80,12 +80,14 @@ class ANNode(Node):
         self.enable = False
 
         self.z = DESIRED_SENSOR  # Desired sensor value for the robot to navigate towards, in dBm
+        self.z_des = Z_DES  # Desired contour value for CROSSTRACK; overridable via /ctrl/z_des
 
     def set_pubsub(self):
         """Set up publishers and subscribers."""
         self.pubsub.create_publisher(Twist, '/ctrl/cmd_vel', 5) #publish to cluster
         self.pubsub.create_subscription(String, '/ctrl/adaptive_mode', self.update_adaptive_mode, 1)
         self.pubsub.create_subscription(String, '/ctrl/cluster_mode', self._mode_callback, 1)
+        self.pubsub.create_subscription(Float64, '/ctrl/z_des', self._z_des_callback, 1)
         self.pubsub.create_subscription(Pose2D, '/rviz/goal_pose2D', self._goal_callback, 10)
         for robot_id in self.robot_id_list:
             self.pubsub.create_subscription(
@@ -123,6 +125,13 @@ class ANNode(Node):
                 self.gradient.mode = mode
                 if temp != mode:
                     self.get_logger().debug(f"Adaptive mode changed from {temp.value} to {mode.value}")
+
+    def _z_des_callback(self, msg: Float64):
+        """Update CROSSTRACK target contour value from external publisher."""
+        new_val = float(msg.data)
+        if abs(new_val - self.z_des) > 1e-6:
+            self.get_logger().info(f"z_des updated: {self.z_des:.4f} -> {new_val:.4f}")
+            self.z_des = new_val
 
     def _mode_callback(self, msg: String):
         """Enable or disable adaptive navigation based on mode message."""
@@ -260,7 +269,7 @@ class ANNode(Node):
         Returns:
             Twist message with computed velocities, or None if calculation fails
         """
-        bearing = self.gradient.get_velocity(zdes=Z_DES)
+        bearing = self.gradient.get_velocity(zdes=self.z_des)
         if bearing is None:
             self.get_logger().warn("No bearing calculated, skipping publish.")
             return None
