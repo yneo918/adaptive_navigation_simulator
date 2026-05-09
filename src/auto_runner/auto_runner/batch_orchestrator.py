@@ -35,6 +35,15 @@ from rclpy.node import Node
 from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Bool, String, Float64
 
+# RCLError is the catch-all for rcl-layer failures (e.g., publishing on a node
+# whose context was shut down). It lives under different paths across rclpy
+# versions — try the stable one, fall back to the pybind11 module.
+try:
+    from rclpy.exceptions import RCLError  # type: ignore[attr-defined]
+except ImportError:
+    from rclpy import _rclpy_pybind11 as _rclpy_impl  # noqa: F401
+    RCLError = _rclpy_impl.RCLError
+
 
 PLOTTER_OUTPUT_DIR = '/tmp/auto_runner_plotter'
 
@@ -144,6 +153,22 @@ def stop_plotter(proc: subprocess.Popen, save_timeout_s: float = 30.0):
     except subprocess.TimeoutExpired:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         proc.wait(timeout=5.0)
+
+
+def already_completed(output_root: str, expt: dict) -> str | None:
+    """Return path of an existing completed NPZ for this experiment, if any.
+
+    Matches files of the form `<expt_id>_*_trajectory_data.npz` placed by a
+    previous run in the experiment's output_subdir.
+    """
+    out_dir = os.path.join(output_root, expt['output_subdir'])
+    if not os.path.isdir(out_dir):
+        return None
+    eid = expt['id']
+    for name in os.listdir(out_dir):
+        if name.startswith(f'{eid}_') and name.endswith('_trajectory_data.npz'):
+            return os.path.join(out_dir, name)
+    return None
 
 
 def find_latest_npz(plotter_dir: str, since_ts: float) -> str | None:
@@ -304,7 +329,7 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     print(f'[{eid}] SIGINT plotter ...')
     stop_plotter(plotter)
 
-    # 8. Move NPZ to organized location
+    # 8. Move NPZ to organized location with experiment id prefix
     npz_path = find_latest_npz(PLOTTER_OUTPUT_DIR, t_spawn)
     if npz_path is None:
         print(f'[{eid}] ERROR: no NPZ produced', file=sys.stderr)
@@ -312,7 +337,9 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     out_dir = os.path.join(output_root, expt['output_subdir'])
     os.makedirs(out_dir, exist_ok=True)
-    dest = os.path.join(out_dir, os.path.basename(npz_path))
+    # Prefix the experiment id so resume / skip-existing can match it later
+    base = os.path.basename(npz_path)
+    dest = os.path.join(out_dir, f'{eid}_{base}')
     shutil.move(npz_path, dest)
     print(f'[{eid}] saved -> {dest}')
     return True
@@ -333,6 +360,11 @@ def main(argv=None):
     parser.add_argument(
         '--dry-run', action='store_true',
         help='Print plan and exit')
+    parser.add_argument(
+        '--no-skip-existing', dest='skip_existing', action='store_false',
+        help='Re-run experiments even if a completed NPZ already exists '
+             '(default: skip).')
+    parser.set_defaults(skip_existing=True)
     args = parser.parse_args(argv)
 
     cfg = import_yaml(args.config)
@@ -346,8 +378,22 @@ def main(argv=None):
             print('No matching experiments', file=sys.stderr)
             return 1
 
-    print(f'Plan: {len(experiments)} experiments')
+    # Filter out already-completed experiments (skip-existing default ON)
+    skipped = []
+    pending = []
     for e in experiments:
+        existing = already_completed(args.output_root, e) if args.skip_existing else None
+        if existing is not None:
+            skipped.append((e['id'], existing))
+        else:
+            pending.append(e)
+
+    if skipped:
+        print(f'Skipping {len(skipped)} already-completed experiments:')
+        for eid, path in skipped:
+            print(f'  {eid:20s} -> {path}')
+    print(f'Plan: {len(pending)} experiments to run')
+    for e in pending:
         zdes = f" z_des={e['z_des']}" if 'z_des' in e else ''
         plateau = ' [no-plateau]' if e.get('disable_plateau') else ''
         print(f"  {e['id']:20s} {e['mode']:14s} d={e['d']:>6} "
@@ -356,26 +402,69 @@ def main(argv=None):
               f"{zdes}{plateau}")
     if args.dry_run:
         return 0
+    if not pending:
+        print('Nothing to run.')
+        return 0
+    experiments = pending
 
     rclpy.init()
     orch = Orchestrator()
 
     failures = []
+    aborted_idx = None
     try:
-        for expt in experiments:
-            ok = run_one_experiment(orch, expt, defaults, args.output_root)
+        for idx, expt in enumerate(experiments):
+            if not rclpy.ok():
+                print(f'\n[ABORT] rclpy context invalid; '
+                      f'stopping batch at index {idx}', file=sys.stderr)
+                aborted_idx = idx
+                break
+            try:
+                ok = run_one_experiment(orch, expt, defaults, args.output_root)
+            except RCLError as e:
+                print(f'\n[ABORT] RCL error during {expt["id"]}: {e}',
+                      file=sys.stderr)
+                failures.append(expt['id'])
+                aborted_idx = idx
+                break
+            except Exception as e:  # noqa: BLE001 - keep batch alive on unexpected
+                print(f'\n[FAIL] {expt["id"]}: {type(e).__name__}: {e}',
+                      file=sys.stderr)
+                failures.append(expt['id'])
+                continue
+
             if not ok:
                 failures.append(expt['id'])
-            # Reset to NEUTRAL between runs
-            orch.stop_pub.publish(Bool(data=True))
+            # Reset to NEUTRAL between runs (best-effort)
+            try:
+                if rclpy.ok():
+                    orch.stop_pub.publish(Bool(data=True))
+            except RCLError:
+                pass
             time.sleep(2.0)
     finally:
-        orch.destroy_node()
-        rclpy.shutdown()
+        try:
+            orch.destroy_node()
+        except Exception:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except Exception:
+            pass
 
-    if failures:
-        print(f'\n[FAIL] {len(failures)} experiments failed: {failures}',
-              file=sys.stderr)
+    remaining = []
+    if aborted_idx is not None:
+        remaining = [e['id'] for e in experiments[aborted_idx + 1:]]
+
+    if failures or remaining:
+        if failures:
+            print(f'\n[FAIL] {len(failures)} experiments failed: {failures}',
+                  file=sys.stderr)
+        if remaining:
+            print(f'[REMAINING] {len(remaining)} experiments not started '
+                  f'(use --ids to resume):\n  --ids {",".join(remaining)}',
+                  file=sys.stderr)
         return 1
     print(f'\n[OK] All {len(experiments)} experiments completed')
     return 0
