@@ -124,8 +124,13 @@ def make_pose_msg(start: dict) -> Pose2D:
     return msg
 
 
-def spawn_plotter(plotter_dir: str, sample_interval: float) -> subprocess.Popen:
-    """Spawn trajectory_plotter_3d in its own process group so SIGINT is isolated."""
+def spawn_plotter(plotter_dir: str, sample_interval: float,
+                  log_path: str | None = None) -> subprocess.Popen:
+    """Spawn trajectory_plotter_3d in its own process group so SIGINT is isolated.
+
+    If log_path is provided, both stdout and stderr are written there so a
+    failed NPZ save can be diagnosed post-mortem.
+    """
     os.makedirs(plotter_dir, exist_ok=True)
     args = [
         'ros2', 'run', 'sensor_field', 'trajectory_plotter_3d',
@@ -134,6 +139,14 @@ def spawn_plotter(plotter_dir: str, sample_interval: float) -> subprocess.Popen:
         '-p', f'trajectory_sample_interval:={sample_interval}',
         '-p', 'visualization_mode:=contour',  # avoid blocking 3D show
     ]
+    if log_path:
+        log_f = open(log_path, 'w')
+        return subprocess.Popen(
+            args,
+            stdout=log_f,
+            stderr=subprocess.STDOUT,
+            preexec_fn=os.setsid,
+        )
     return subprocess.Popen(
         args,
         stdout=subprocess.DEVNULL,
@@ -142,17 +155,33 @@ def spawn_plotter(plotter_dir: str, sample_interval: float) -> subprocess.Popen:
     )
 
 
-def stop_plotter(proc: subprocess.Popen, save_timeout_s: float = 30.0):
-    """Send SIGINT to plotter process group; wait for clean exit (NPZ save)."""
+def stop_plotter(proc: subprocess.Popen, save_timeout_s: float = 60.0,
+                 verbose: bool = False) -> str:
+    """Send SIGINT to plotter process group; wait for clean exit (NPZ save).
+
+    Returns a short status string explaining how the plotter exited.
+    """
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGINT)
     except ProcessLookupError:
-        return
+        return 'already-dead'
     try:
-        proc.wait(timeout=save_timeout_s)
+        rc = proc.wait(timeout=save_timeout_s)
+        return f'clean-exit(rc={rc})'
     except subprocess.TimeoutExpired:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-        proc.wait(timeout=5.0)
+        if verbose:
+            print(f'[stop_plotter] SIGINT timeout after {save_timeout_s}s, '
+                  f'escalating to SIGTERM', file=sys.stderr)
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except ProcessLookupError:
+            return 'sigint-timeout-then-dead'
+        try:
+            rc = proc.wait(timeout=5.0)
+            return f'sigterm-exit(rc={rc})'
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return 'sigkill'
 
 
 def already_completed(output_root: str, expt: dict) -> str | None:
@@ -245,12 +274,14 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         rclpy.spin_once(orch, timeout_sec=0.1)
     orch.config_pub.publish(String(data=__import__('json').dumps(cfg)))
 
-    # 2. Spawn the trajectory plotter
+    # 2. Spawn the trajectory plotter, capturing its log for diagnostics
     shutil.rmtree(PLOTTER_OUTPUT_DIR, ignore_errors=True)
     os.makedirs(PLOTTER_OUTPUT_DIR, exist_ok=True)
     t_spawn = time.time()
-    plotter = spawn_plotter(PLOTTER_OUTPUT_DIR, sample_interval)
-    print(f'[{eid}] plotter spawned (pid={plotter.pid})')
+    plotter_log = os.path.join(PLOTTER_OUTPUT_DIR, f'{eid}_plotter.log')
+    plotter = spawn_plotter(PLOTTER_OUTPUT_DIR, sample_interval,
+                            log_path=plotter_log)
+    print(f'[{eid}] plotter spawned (pid={plotter.pid}, log={plotter_log})')
 
     # 3. Wait for plotter terrain ingestion + first leader pose
     print(f'[{eid}] warmup {warmup}s ...')
@@ -327,12 +358,35 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     while time.time() < cool_deadline:
         rclpy.spin_once(orch, timeout_sec=0.05)
     print(f'[{eid}] SIGINT plotter ...')
-    stop_plotter(plotter)
+    status = stop_plotter(plotter, verbose=True)
+    print(f'[{eid}] plotter {status}')
+
+    # Brief grace for filesystem flush after the plotter exits
+    time.sleep(1.0)
 
     # 8. Move NPZ to organized location with experiment id prefix
     npz_path = find_latest_npz(PLOTTER_OUTPUT_DIR, t_spawn)
     if npz_path is None:
-        print(f'[{eid}] ERROR: no NPZ produced', file=sys.stderr)
+        print(f'[{eid}] ERROR: no NPZ produced (plotter status: {status})',
+              file=sys.stderr)
+        # Preserve the plotter log so the failure can be diagnosed
+        if os.path.isfile(plotter_log):
+            out_dir = os.path.join(output_root, expt['output_subdir'])
+            os.makedirs(out_dir, exist_ok=True)
+            saved_log = os.path.join(out_dir, f'{eid}_FAILED_plotter.log')
+            try:
+                shutil.copy(plotter_log, saved_log)
+                print(f'[{eid}] plotter log preserved -> {saved_log}',
+                      file=sys.stderr)
+                # Dump the tail so the user sees the cause immediately
+                with open(plotter_log) as f:
+                    lines = f.readlines()
+                tail = ''.join(lines[-15:])
+                print(f'[{eid}] last 15 lines of plotter log:\n{tail}',
+                      file=sys.stderr)
+            except OSError as e:
+                print(f'[{eid}] could not preserve plotter log: {e}',
+                      file=sys.stderr)
         return False
 
     out_dir = os.path.join(output_root, expt['output_subdir'])
