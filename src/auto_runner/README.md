@@ -152,11 +152,13 @@ ros2 run auto_runner batch_orchestrator \
 
 ### 想定所要時間
 
-| time_scale | 1件平均 | 合計（50件） |
+sample_interval = 0.5s, max_steps = 5000 → 1件最大2500s (≈42分) シミュ走行。
+
+| time_scale | 1件平均 (壁時計) | 合計（50件） |
 |---|---|---|
-| 1.0 (実時間) | 1〜7時間 | **数日** |
-| 10.0 (推奨初期値) | 6〜40分 | **5〜30時間** |
-| 50.0 (高速) | 1〜8分 | **1〜6時間** |
+| 1.0 (実時間) | 10〜42分 | **10〜35時間** |
+| 10.0 (推奨初期値) | 1〜5分 | **1〜4時間** |
+| 50.0 (高速) | 15秒〜1分 | **15分〜1時間** |
 
 実際の所要は収束タイミング次第。プラトー検出で早期終了するモードでは大幅に短縮される。
 
@@ -272,14 +274,18 @@ defaults セクションを編集（または個別実験で上書き）：
 
 ```yaml
 defaults:
-  max_steps: 5000              # 全実験のステップ上限
-  plateau_eps: 0.5             # 収束判定: 位置span閾値
-  plateau_window_steps: 200    # 収束判定: 窓幅 (step)
-  oob_threshold: 0.12          # 領域外判定: センサ値閾値 (z_norm)
-  oob_window_steps: 50         # 領域外判定: 連続step
-  time_limit_s: 1800           # ハードタイムアウト (秒)
-  progress_every_steps: 20     # 進捗ログ間隔
+  trajectory_sample_interval: 0.5  # サンプリング間隔 [s] (既存データと互換)
+  max_steps: 5000                  # ステップ上限 (= 2500s 走行相当)
+  plateau_eps: 0.5                 # 収束判定: 位置span閾値 [sim units]
+  plateau_window_steps: 2000       # 収束判定: 窓幅 [step] (=1000s)
+  oob_threshold: 0.12              # 領域外判定: センサ値閾値 (z_norm)
+  oob_window_steps: 500            # 領域外判定: 連続step (=250s)
+  time_limit_s: 4500               # ハードタイムアウト (秒)
+  progress_every_steps: 200        # 進捗ログ間隔 (=100s)
 ```
+
+step単位を変える際は、上記の step ベースパラメータも time 換算で再設定すること。
+sample_interval × N を意識（例: 0.5s × 2000 = 1000s）。
 
 ### 新モードの追加
 

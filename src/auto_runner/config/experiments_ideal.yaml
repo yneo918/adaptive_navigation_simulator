@@ -22,13 +22,14 @@
 #   d (GUI units): d_real_m = d * 20
 
 defaults:
-  trajectory_sample_interval: 5.0
-  max_steps: 5000
-  time_limit_s: 1800
+  trajectory_sample_interval: 0.5  # matches past data (process_experiments.py)
+  max_steps: 5000                  # 0.5s/step * 5000 = 2500s = 42 min
+  time_limit_s: 4500               # 75 min safety cap (1.8x max_steps duration)
   plateau_eps: 0.5
-  plateau_window_steps: 200
-  oob_threshold: 0.12              # sensor z floor (= ~10^4 Bq/m^2)
-  oob_window_steps: 50             # ~250 s of all-robots-out
+  plateau_window_steps: 2000       # 0.5s/step * 2000 = 1000s convergence window
+  oob_threshold: 0.12              # sensor z floor (~10^4 Bq/m^2)
+  oob_window_steps: 500            # 0.5s/step * 500 = 250 s all-robots-out
+  progress_every_steps: 200        # 0.5s/step * 200 = 100s between progress lines
   warmup_s: 5.0
   cooldown_s: 2.0
 
