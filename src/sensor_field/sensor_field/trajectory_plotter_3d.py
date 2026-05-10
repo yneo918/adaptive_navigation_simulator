@@ -71,6 +71,7 @@ class TrajectoryPlotter3D(Node):
         self.declare_parameter('show_lines', True)  # Show trajectory lines
         self.declare_parameter('line_robot_ids', ['p1', 'p2', 'p3', 'p4', 'p5'])  # Robot IDs to show lines (empty = all if show_lines=True)
         self.declare_parameter('visualization_mode', 'contour')  # '3d', 'contour', or 'both'
+        self.declare_parameter('show_plot', True)  # set False for headless / batch runs
         self.declare_parameter('contour_levels', 20)  # Number of contour levels
 
         # Get parameters
@@ -109,6 +110,7 @@ class TrajectoryPlotter3D(Node):
         self.show_lines = self.get_parameter('show_lines').value
         self.line_robot_ids: List[str] = list(self.get_parameter('line_robot_ids').value)
         self.visualization_mode = self.get_parameter('visualization_mode').value
+        self.show_plot = self.get_parameter('show_plot').value
         self.contour_levels = self.get_parameter('contour_levels').value
 
         # Terrain data storage
@@ -411,8 +413,11 @@ class TrajectoryPlotter3D(Node):
         plt.savefig(output_path, dpi=self.dpi, bbox_inches='tight')
         print(f'[INFO] 3D plot saved to {output_path}')
 
-        # Display plot (blocking - user closes window to exit)
-        plt.show()
+        if self.show_plot:
+            # Display plot (blocking - user closes window to exit)
+            plt.show()
+        else:
+            plt.close(fig)
 
     def _generate_contour_plot(self) -> None:
         """Generate 2D contour plot."""
@@ -442,8 +447,11 @@ class TrajectoryPlotter3D(Node):
         plt.savefig(output_path, dpi=self.dpi, bbox_inches='tight')
         print(f'[INFO] Contour plot saved to {output_path}')
 
-        # Display plot (blocking - user closes window to exit)
-        plt.show()
+        if self.show_plot:
+            # Display plot (blocking - user closes window to exit)
+            plt.show()
+        else:
+            plt.close(fig)
 
     def _plot_terrain_surface(self, ax: Axes3D) -> None:
         """Plot terrain as a 3D surface."""

@@ -138,6 +138,7 @@ def spawn_plotter(plotter_dir: str, sample_interval: float,
         '-p', f'output_dir:={plotter_dir}',
         '-p', f'trajectory_sample_interval:={sample_interval}',
         '-p', 'visualization_mode:=contour',  # avoid blocking 3D show
+        '-p', 'show_plot:=false',  # no GUI popup in batch mode
     ]
     if log_path:
         log_f = open(log_path, 'w')
@@ -396,6 +397,24 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     dest = os.path.join(out_dir, f'{eid}_{base}')
     shutil.move(npz_path, dest)
     print(f'[{eid}] saved -> {dest}')
+
+    # Also move any companion PNG/PDF artifacts the plotter saved alongside
+    # the NPZ (same timestamp prefix, e.g. 20260507_120100_trajectory_3d_contour.png)
+    # so all per-run outputs land in one directory.
+    npz_dir = os.path.dirname(npz_path)
+    timestamp_prefix = base.split('_trajectory_')[0]  # YYYYMMDD_HHMMSS
+    if os.path.isdir(npz_dir):
+        for name in os.listdir(npz_dir):
+            if name.startswith(timestamp_prefix) and not name.endswith(
+                    '_trajectory_data.npz'):
+                src = os.path.join(npz_dir, name)
+                aux_dest = os.path.join(out_dir, f'{eid}_{name}')
+                try:
+                    shutil.move(src, aux_dest)
+                    print(f'[{eid}] aux  -> {aux_dest}')
+                except OSError as e:
+                    print(f'[{eid}] warning: failed to move {src}: {e}',
+                          file=sys.stderr)
     return True
 
 
