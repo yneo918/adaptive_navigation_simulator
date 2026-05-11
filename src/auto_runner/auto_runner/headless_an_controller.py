@@ -129,12 +129,23 @@ class HeadlessANController(Node):
         if 'b5' in cfg:
             self.cluster_b5 = float(cfg['b5'])
         if 'adaptive_mode' in cfg:
-            mode = cfg['adaptive_mode']
-            if any(m.value == mode for m in ControlMode):
-                self.adaptive_mode = mode
-                self.get_logger().info(f'  adaptive_mode set to {mode}')
+            requested = cfg['adaptive_mode']
+            # Accept either the enum NAME (e.g., "CROSSTRACK_CW") or the
+            # enum VALUE string (e.g., "crosstrack_cw_controller").
+            # adaptive_nav matches the VALUE form on /ctrl/adaptive_mode,
+            # so always publish the value form.
+            matched = None
+            for m in ControlMode:
+                if m.name == requested or m.value == requested:
+                    matched = m
+                    break
+            if matched is not None:
+                self.adaptive_mode = matched.value
+                self.get_logger().info(
+                    f'  adaptive_mode set to {matched.name} '
+                    f'(publishing "{matched.value}")')
             else:
-                self.get_logger().error(f'Unknown adaptive_mode: {mode}')
+                self.get_logger().error(f'Unknown adaptive_mode: {requested}')
         if 'cluster_mode' in cfg:
             self.cluster_mode = cfg['cluster_mode']
             self.get_logger().info(f'  cluster_mode set to {self.cluster_mode}')
