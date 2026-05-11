@@ -168,7 +168,9 @@ def stop_plotter(proc: subprocess.Popen, save_timeout_s: float = 60.0,
         return 'already-dead'
     try:
         rc = proc.wait(timeout=save_timeout_s)
-        return f'clean-exit(rc={rc})'
+        if rc == 0:
+            return f'clean-exit(rc={rc})'
+        return f'failed-exit(rc={rc})'
     except subprocess.TimeoutExpired:
         if verbose:
             print(f'[stop_plotter] SIGINT timeout after {save_timeout_s}s, '

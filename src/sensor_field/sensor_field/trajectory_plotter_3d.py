@@ -655,21 +655,51 @@ def main(args=None) -> None:
     rclpy.init(args=args)
     node = TrajectoryPlotter3D()
 
+    spin_error = None
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        # DDS / pybind11 errors can occur during shutdown when the executor
+        # is mid-callback. We must not let these prevent data persistence.
+        spin_error = e
+        print(f'[WARN] spin raised {type(e).__name__}: {e}', file=sys.stderr)
+        print('[WARN] proceeding to save data anyway', file=sys.stderr)
 
-    # Generate plot after spin ends
+    # Generate plot (which saves NPZ). Even if plot rendering fails, fall
+    # back to a direct save_data() so trajectories are preserved.
     print('[INFO] Generating plot...')
-    node.generate_plot()
+    try:
+        node.generate_plot()
+    except Exception as e:
+        print(f'[ERROR] generate_plot failed: {type(e).__name__}: {e}',
+              file=sys.stderr)
+        try:
+            if getattr(node, 'terrain_received', False):
+                node.save_data()
+                print('[INFO] Fallback: NPZ saved without plot')
+            else:
+                print('[ERROR] no terrain received; NPZ cannot be saved',
+                      file=sys.stderr)
+        except Exception as e2:
+            print(f'[ERROR] save_data fallback failed: {e2}',
+                  file=sys.stderr)
     print('[INFO] To reopen: ros2 run sensor_field trajectory_viewer')
 
-    node.destroy_node()
+    try:
+        node.destroy_node()
+    except Exception:
+        pass
     try:
         rclpy.shutdown()
     except Exception:
         pass
+
+    # If spin died with a non-KeyboardInterrupt error, still indicate failure
+    # so the orchestrator's stop_plotter status flags this run for review.
+    if spin_error is not None:
+        sys.exit(2)
 
 
 if __name__ == '__main__':
