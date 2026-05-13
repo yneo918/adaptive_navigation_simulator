@@ -25,10 +25,19 @@ defaults:
   trajectory_sample_interval: 0.5  # matches past data (process_experiments.py)
   max_steps: 5000                  # 0.5s/step * 5000 = 2500s = 42 min
   time_limit_s: 4500               # 75 min safety cap (1.8x max_steps duration)
-  plateau_eps: 0.5
-  plateau_window_steps: 2000       # 0.5s/step * 2000 = 1000s convergence window
+
+  # Convergence checks (OR-combined; all share plateau_window_steps).
+  # Disabled when an experiment sets disable_plateau: true (CROSSTRACK).
+  plateau_window_steps: 1000       # 0.5s/step * 1000 = 500 s
+  plateau_eps: 0.5                 # (1) true stop: max(span_x, span_y) < eps
+  net_disp_eps: 2.0                # (2) orbital trap: |pos[end]-pos[start]| < eps
+                                   #     40 m real; survives oscillation around a max
+  z_range_eps: 0.005               # (3) z_c saturation: max-min z_c < eps over window
+
+  # Out-of-area: sea / data-sparse / zero deposition zones
   oob_threshold: 0.12              # sensor z floor (~10^4 Bq/m^2)
   oob_window_steps: 500            # 0.5s/step * 500 = 250 s all-robots-out
+
   progress_every_steps: 200        # 0.5s/step * 200 = 100s between progress lines
   warmup_s: 5.0
   cooldown_s: 2.0

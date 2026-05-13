@@ -37,12 +37,21 @@
 
 | 条件 | 内容 | 適用 |
 |---|---|---|
-| max_steps | サンプル数到達 (default 5000) | 全モード |
-| 収束 (plateau) | 直近200stepでleader位置span < 0.5 sim units | MAX/MIN/RIDGE/TRENCH |
-| 領域外 (oob) | 5台全ロボットのz < 0.12 が50step連続 | 全モード |
-| time_limit | 30分タイムアウト (default 1800s) | 全モード |
+| max_steps | サンプル数到達 (default 5000 = 2500s 走行) | 全モード |
+| **収束 (3種)** | 下記いずれか1つ | MAX/MIN/RIDGE/TRENCH |
+| 領域外 (oob) | 5台全ロボットの z < 0.12 が 500step (250s) 連続 | 全モード |
+| time_limit | 75分壁時計タイムアウト (default 4500s) | 全モード |
 
-CROSSTRACKは**周回し続ける**ため、収束(plateau)判定を `disable_plateau: true` で無効化済み。
+### 収束判定の3条件 (OR、窓=直近1000step=500s)
+
+| 条件 | 数式 | 何を捉える |
+|---|---|---|
+| **position span** | max(span_x, span_y) < 0.5 sim単位 | 真の静止（差動駆動では稀） |
+| **net displacement** | \|pos[end] − pos[start]\| < 2.0 sim単位 | **極値周辺で振動・周回する状態** |
+| **z_c stability** | max(z_c) − min(z_c) < 0.005 | センサ値が変化しなくなった状態 |
+
+CROSSTRACK は等高線を**周回し続ける**動作のため、上記収束3条件すべてを
+`disable_plateau: true` で無効化（max_steps / oob / time_limit のみ機能）。
 
 ## 前提
 
@@ -276,16 +285,23 @@ defaults セクションを編集（または個別実験で上書き）：
 defaults:
   trajectory_sample_interval: 0.5  # サンプリング間隔 [s] (既存データと互換)
   max_steps: 5000                  # ステップ上限 (= 2500s 走行相当)
-  plateau_eps: 0.5                 # 収束判定: 位置span閾値 [sim units]
-  plateau_window_steps: 2000       # 収束判定: 窓幅 [step] (=1000s)
-  oob_threshold: 0.12              # 領域外判定: センサ値閾値 (z_norm)
-  oob_window_steps: 500            # 領域外判定: 連続step (=250s)
   time_limit_s: 4500               # ハードタイムアウト (秒)
+
+  # 収束判定 (窓=1000step=500s 共通、OR条件)
+  plateau_window_steps: 1000       # 共通窓幅 [step]
+  plateau_eps: 0.5                 # 位置 span 閾値 [sim units]
+  net_disp_eps: 2.0                # 純変位閾値 [sim units] — 振動・周回検出
+  z_range_eps: 0.005               # z_c 変動幅閾値 (normalized)
+
+  # 領域外
+  oob_threshold: 0.12              # センサ値閾値 (z_norm)
+  oob_window_steps: 500            # 連続step (=250s)
+
   progress_every_steps: 200        # 進捗ログ間隔 (=100s)
 ```
 
 step単位を変える際は、上記の step ベースパラメータも time 換算で再設定すること。
-sample_interval × N を意識（例: 0.5s × 2000 = 1000s）。
+sample_interval × N を意識（例: 0.5s × 1000 = 500s）。
 
 ### 新モードの追加
 

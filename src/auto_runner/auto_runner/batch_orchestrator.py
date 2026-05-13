@@ -59,7 +59,8 @@ class Orchestrator(Node):
         self.pose_pub = self.create_publisher(Pose2D, '/rviz/pose2D', 10)
 
         self._leader_xy = None
-        self._leader_history = collections.deque(maxlen=2000)
+        self._leader_history = collections.deque(maxlen=4000)
+        self._z_c_history = collections.deque(maxlen=4000)
         self.create_subscription(
             Pose2D, '/p1/pose2D', self._on_leader_pose, 10)
 
@@ -87,6 +88,7 @@ class Orchestrator(Node):
 
     def reset_history(self):
         self._leader_history.clear()
+        self._z_c_history.clear()
         self._leader_xy = None
         self._oob_streak = 0
         for k in self._robot_z:
@@ -95,6 +97,11 @@ class Orchestrator(Node):
     def push_history(self):
         if self._leader_xy is not None:
             self._leader_history.append(self._leader_xy)
+        # Track mean sensor reading across all reporting robots as z_c proxy.
+        # Used as one of the convergence signals (orbital limit-cycle detection).
+        z_vals = [v for v in self._robot_z.values() if v is not None]
+        if z_vals:
+            self._z_c_history.append(sum(z_vals) / len(z_vals))
 
     def push_oob_check(self, threshold: float) -> int:
         """Update out-of-area streak counter. Returns current streak.
@@ -232,13 +239,35 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
     if not expt.get('disable_plateau', defaults.get('disable_plateau', False)):
         win = expt.get('plateau_window_steps', defaults['plateau_window_steps'])
         eps = expt.get('plateau_eps', defaults['plateau_eps'])
+        net_eps = expt.get('net_disp_eps', defaults.get('net_disp_eps', 2.0))
+        z_eps = expt.get('z_range_eps', defaults.get('z_range_eps', 0.005))
+
         if len(orch._leader_history) >= win:
             recent = list(orch._leader_history)[-win:]
             xs = [p[0] for p in recent]
             ys = [p[1] for p in recent]
+
+            # (1) Position span: detects true stop (rare with diff-drive)
             span = max(max(xs) - min(xs), max(ys) - min(ys))
             if span < eps:
                 return True, f'plateau (span={span:.3f} < {eps})'
+
+            # (2) Net displacement: catches orbital limit cycles around an
+            # extremum even when oscillation amplitude exceeds plateau_eps.
+            dx = recent[-1][0] - recent[0][0]
+            dy = recent[-1][1] - recent[0][1]
+            net = (dx * dx + dy * dy) ** 0.5
+            if net < net_eps:
+                return True, (f'net_disp converged '
+                              f'({net:.3f} < {net_eps} over {win} steps)')
+
+        # (3) z_c stability: sensor reading no longer changing
+        if len(orch._z_c_history) >= win:
+            recent_z = list(orch._z_c_history)[-win:]
+            z_range = max(recent_z) - min(recent_z)
+            if z_range < z_eps:
+                return True, (f'z_c stable '
+                              f'(range={z_range:.4f} < {z_eps} over {win} steps)')
 
     # Out-of-area: all 5 robots below sensor threshold for sustained period
     oob_win = expt.get('oob_window_steps', defaults['oob_window_steps'])
