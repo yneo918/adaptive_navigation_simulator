@@ -33,6 +33,13 @@ defaults:
   net_disp_eps: 2.0                # (2) orbital trap: |pos[end]-pos[start]| < eps
                                    #     40 m real; survives oscillation around a max
   z_range_eps: 0.005               # (3) z_c saturation: max-min z_c < eps over window
+  # z_range alone is satisfied when the cluster slides along an iso-contour
+  # (constant z_c but still moving). Require recent position span to also
+  # be small so we only terminate on a genuinely parked cluster.
+  # (Path length is a poor discriminator: a cluster oscillating in place
+  # accumulates path; we want the spatial extent of recent motion.)
+  stable_motion_window_steps: 200  # last 100 s span check
+  stable_motion_span_eps: 5.0      # 100 m bbox span in last 100 s
 
   # Out-of-area: sea / data-sparse / zero deposition zones
   oob_threshold: 0.12              # sensor z floor (~10^4 Bq/m^2)

@@ -261,13 +261,37 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
                 return True, (f'net_disp converged '
                               f'({net:.3f} < {net_eps} over {win} steps)')
 
-        # (3) z_c stability: sensor reading no longer changing
+        # (3) z_c stability AND recent stillness
+        # Bare z_c stability can fire while the cluster is still actively
+        # moving along an iso-deposition contour (perpendicular to gradient).
+        # That is NOT a convergence in the MAX/MIN sense (the cluster could
+        # in principle escape if pointed correctly). Require RECENT position
+        # span (last ~200 steps) to also be small. Path length is a poor
+        # discriminator because a cluster oscillating in place still
+        # accumulates path; what we want is the spatial extent of recent
+        # motion — small means "parked".
         if len(orch._z_c_history) >= win:
             recent_z = list(orch._z_c_history)[-win:]
             z_range = max(recent_z) - min(recent_z)
             if z_range < z_eps:
-                return True, (f'z_c stable '
-                              f'(range={z_range:.4f} < {z_eps} over {win} steps)')
+                motion_win = expt.get(
+                    'stable_motion_window_steps',
+                    defaults.get('stable_motion_window_steps', 200))
+                motion_span_eps = expt.get(
+                    'stable_motion_span_eps',
+                    defaults.get('stable_motion_span_eps', 5.0))
+                if len(orch._leader_history) >= motion_win:
+                    pts = list(orch._leader_history)[-motion_win:]
+                    xs2 = [p[0] for p in pts]
+                    ys2 = [p[1] for p in pts]
+                    span2 = max(max(xs2) - min(xs2), max(ys2) - min(ys2))
+                    if span2 < motion_span_eps:
+                        return True, (
+                            f'z_c stable + parked '
+                            f'(z_range={z_range:.4f}<{z_eps}, '
+                            f'span={span2:.2f}<{motion_span_eps} '
+                            f'in last {motion_win} steps)')
+                    # else: iso-contour traversal, do NOT terminate
 
     # Out-of-area: all 5 robots below sensor threshold for sustained period
     oob_win = expt.get('oob_window_steps', defaults['oob_window_steps'])

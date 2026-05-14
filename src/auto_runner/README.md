@@ -48,7 +48,11 @@
 |---|---|---|
 | **position span** | max(span_x, span_y) < 0.5 sim単位 | 真の静止（差動駆動では稀） |
 | **net displacement** | \|pos[end] − pos[start]\| < 2.0 sim単位 | **極値周辺で振動・周回する状態** |
-| **z_c stability** | max(z_c) − min(z_c) < 0.005 | センサ値が変化しなくなった状態 |
+| **z_c stability + parked** | max(z_c) − min(z_c) < 0.005 **AND** 直近200step bbox span < 5 sim | センサ値が飽和し、かつクラスタも実質静止 |
+
+z_c stability に「直近 bbox span が小さい」AND 条件があるのは、iso-contour（等高線）を
+横断走行している場合に z_c は変化しないがクラスタは動いている、というケースを除外するため。
+動いている状態を `iso-contour traversal` と判定して停止しない（探索継続）。
 
 CROSSTRACK は等高線を**周回し続ける**動作のため、上記収束3条件すべてを
 `disable_plateau: true` で無効化（max_steps / oob / time_limit のみ機能）。
@@ -292,6 +296,8 @@ defaults:
   plateau_eps: 0.5                 # 位置 span 閾値 [sim units]
   net_disp_eps: 2.0                # 純変位閾値 [sim units] — 振動・周回検出
   z_range_eps: 0.005               # z_c 変動幅閾値 (normalized)
+  stable_motion_window_steps: 200  # iso-contour 抑制窓 (= 100s)
+  stable_motion_span_eps: 5.0      # 直近 100s bbox span閾値 [sim units]
 
   # 領域外
   oob_threshold: 0.12              # センサ値閾値 (z_norm)
