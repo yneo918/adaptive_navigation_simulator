@@ -309,12 +309,18 @@ experiments:
   - id: K03_TRENCH_d200
     mode: TRENCH_UP
     d: 200.0
-    start: {x: -3500.0, y: 200.0, theta: 0.0}
+    # Was (-3500, 200): z=0 zone, OOB exit at step 535
+    # New (524, -3124): S of FDNPP, z_center=0.228 with 3 high walls (N/NE/E)
+    start: {x: 524.0, y: -3124.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
   - id: K04_TRENCH_d200
     mode: TRENCH_UP
     d: 200.0
-    start: {x: -1000.0, y: -1800.0, theta: 0.0}
+    # Was (-1000, -1800): locally flat region (surrounding delta only 0.093),
+    # cluster stuck at step 997 with net_disp 5.3 sim
+    # New (-4076, -2524): far W, z_center=0.218 with high walls (E/NE/S)
+    # Note: N/NW directions are data-sparse; OOB possible if cluster wanders there
+    start: {x: -4076.0, y: -2524.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
   - id: K05_TRENCH_d200
     mode: TRENCH_UP
