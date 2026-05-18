@@ -331,24 +331,36 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     orch.config_pub.publish(String(data=__import__('json').dumps(cfg)))
 
     # 1b. For RANDOM_WALK baseline, push seed/period directly to adaptive_nav
-    # via ros2 param set (the parameter callback re-seeds the RNG immediately)
+    # via ros2 param set (the parameter callback re-seeds the RNG immediately).
+    # The adaptive_nav node is launched as /cluster_feedback (per launch file).
     if mode in ('RANDOM_WALK', 'random_walk'):
         seed = int(expt.get('random_walk_seed', 0))
         period = int(expt.get(
             'random_walk_period_steps',
             defaults.get('random_walk_period_steps', 50)))
-        for param, val in [('random_walk_seed', seed),
-                           ('random_walk_period_steps', period)]:
-            try:
-                subprocess.run(
-                    ['ros2', 'param', 'set', '/adaptive_navigator',
-                     param, str(val)],
-                    check=True, capture_output=True, timeout=10.0)
-            except (subprocess.CalledProcessError,
-                    subprocess.TimeoutExpired) as e:
-                print(f'[{eid}] WARN: ros2 param set {param}={val} failed: {e}',
-                      file=sys.stderr)
-        print(f'[{eid}] random_walk_seed={seed}, period={period}')
+        # Try common node names; the disaster_AN_headless.launch.py uses
+        # `name='cluster_feedback'` for adaptive_nav. Fall back to
+        # `adaptive_navigator` in case the launch is changed.
+        for node_name in ('/cluster_feedback', '/adaptive_navigator'):
+            success = True
+            for param, val in [('random_walk_seed', seed),
+                               ('random_walk_period_steps', period)]:
+                try:
+                    subprocess.run(
+                        ['ros2', 'param', 'set', node_name, param, str(val)],
+                        check=True, capture_output=True, timeout=10.0)
+                except (subprocess.CalledProcessError,
+                        subprocess.TimeoutExpired) as e:
+                    success = False
+                    break
+            if success:
+                print(f'[{eid}] random_walk: seed={seed}, period={period} '
+                      f'(applied to {node_name})')
+                break
+        else:
+            print(f'[{eid}] WARN: ros2 param set failed on all known node names; '
+                  f'random_walk_seed will be node default',
+                  file=sys.stderr)
 
     # 2. Spawn the trajectory plotter, capturing its log for diagnostics
     shutil.rmtree(PLOTTER_OUTPUT_DIR, ignore_errors=True)
