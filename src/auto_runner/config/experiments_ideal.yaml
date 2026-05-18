@@ -310,8 +310,10 @@ experiments:
     mode: TRENCH_UP
     d: 200.0
     # Was (-3500, 200): z=0 zone, OOB exit at step 535
-    # New (524, -3124): S of FDNPP, z_center=0.228 with 3 high walls (N/NE/E)
-    start: {x: 524.0, y: -3124.0, theta: 0.0}
+    # Was (524, -3124): worked but cluster exited E boundary (end x=1072 > x_hi=694)
+    # New (-500, -2700): z_c=0.267, strong N wall (z=0.56, Δ+0.30),
+    # N-direction trajectory stays in data for 6 km, ~109 km of N margin
+    start: {x: -500.0, y: -2700.0, theta: 0.0}
     output_subdir: IDEAL/TRENCH
   - id: K04_TRENCH_d200
     mode: TRENCH_UP
