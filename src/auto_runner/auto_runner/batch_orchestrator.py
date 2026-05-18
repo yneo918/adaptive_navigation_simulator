@@ -236,7 +236,15 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
     if time.time() - t_started >= time_limit:
         return True, f'time_limit={time_limit}s'
 
-    if not expt.get('disable_plateau', defaults.get('disable_plateau', False)):
+    # RANDOM_WALK has no "convergence" by design (it wanders), so plateau /
+    # net_disp / z_range checks misfire: a wandering trajectory has near-zero
+    # net displacement over any window. Always disable convergence checks for
+    # RANDOM_WALK regardless of YAML setting.
+    mode_for_term = expt.get('mode', '')
+    rw_mode = mode_for_term in ('RANDOM_WALK', 'random_walk')
+
+    if (not rw_mode) and (not expt.get('disable_plateau',
+                                       defaults.get('disable_plateau', False))):
         win = expt.get('plateau_window_steps', defaults['plateau_window_steps'])
         eps = expt.get('plateau_eps', defaults['plateau_eps'])
         net_eps = expt.get('net_disp_eps', defaults.get('net_disp_eps', 2.0))
