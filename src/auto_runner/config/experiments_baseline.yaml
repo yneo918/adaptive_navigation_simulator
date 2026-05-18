@@ -1,0 +1,1092 @@
+# Random walk baseline experiments to validate AN algorithm value.
+#
+# Auto-generated from experiments_ideal.yaml: each of the 50 AN start positions
+# is replayed as a RANDOM_WALK trial with the SAME d (cluster footprint),
+# repeated 3 times with different seeds for statistical comparison.
+#
+# Evaluation: one RW trajectory is post-processed against all 5 mode metrics
+# (z_peak, z_valley, time_on_boundary, z_signature) and compared to the AN
+# run from the same start position via z-score.
+#
+# Total: 50 starts x 3 trials = 150 runs.
+
+defaults:
+  trajectory_sample_interval: 0.5  # matches past data (process_experiments.py)
+  max_steps: 5000                  # 0.5s/step * 5000 = 2500s = 42 min
+  time_limit_s: 4500               # 75 min safety cap (1.8x max_steps duration)
+
+  # Convergence checks (OR-combined; all share plateau_window_steps).
+  # Disabled when an experiment sets disable_plateau: true (CROSSTRACK).
+  plateau_window_steps: 1000       # 0.5s/step * 1000 = 500 s
+  plateau_eps: 0.5                 # (1) true stop: max(span_x, span_y) < eps
+  net_disp_eps: 2.0                # (2) orbital trap: |pos[end]-pos[start]| < eps
+                                   #     40 m real; survives oscillation around a max
+  z_range_eps: 0.005               # (3) z_c saturation: max-min z_c < eps over window
+  # z_range alone is satisfied when the cluster slides along an iso-contour
+  # (constant z_c but still moving). Require recent position span to also
+  # be small so we only terminate on a genuinely parked cluster.
+  # (Path length is a poor discriminator: a cluster oscillating in place
+  # accumulates path; we want the spatial extent of recent motion.)
+  stable_motion_window_steps: 200  # last 100 s span check
+  stable_motion_span_eps: 5.0      # 100 m bbox span in last 100 s
+
+  # Out-of-area: sea / data-sparse / zero deposition zones
+  oob_threshold: 0.12              # sensor z floor (~10^4 Bq/m^2)
+  oob_window_steps: 500            # 0.5s/step * 500 = 250 s all-robots-out
+
+  progress_every_steps: 200        # 0.5s/step * 200 = 100s between progress lines
+  warmup_s: 5.0
+  cooldown_s: 2.0
+  random_walk_period_steps: 50    # 25 s @ 0.5 s/step
+
+experiments:
+  - id: G01_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1950.0, y: 1263.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G01_MAX_d150 (MAX d=150.0), trial 1
+  - id: G01_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1950.0, y: 1263.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G01_MAX_d150 (MAX d=150.0), trial 2
+  - id: G01_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1950.0, y: 1263.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G01_MAX_d150 (MAX d=150.0), trial 3
+  - id: G02_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G02_MAX_d150 (MAX d=150.0), trial 1
+  - id: G02_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G02_MAX_d150 (MAX d=150.0), trial 2
+  - id: G02_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G02_MAX_d150 (MAX d=150.0), trial 3
+  - id: G03_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G03_MAX_d150 (MAX d=150.0), trial 1
+  - id: G03_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G03_MAX_d150 (MAX d=150.0), trial 2
+  - id: G03_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G03_MAX_d150 (MAX d=150.0), trial 3
+  - id: G04_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G04_MAX_d150 (MAX d=150.0), trial 1
+  - id: G04_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G04_MAX_d150 (MAX d=150.0), trial 2
+  - id: G04_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G04_MAX_d150 (MAX d=150.0), trial 3
+  - id: G05_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -450.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G05_MAX_d150 (MAX d=150.0), trial 1
+  - id: G05_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -450.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G05_MAX_d150 (MAX d=150.0), trial 2
+  - id: G05_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -450.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G05_MAX_d150 (MAX d=150.0), trial 3
+  - id: G06_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G06_MAX_d150 (MAX d=150.0), trial 1
+  - id: G06_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G06_MAX_d150 (MAX d=150.0), trial 2
+  - id: G06_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G06_MAX_d150 (MAX d=150.0), trial 3
+  - id: G07_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -2000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G07_MAX_d150 (MAX d=150.0), trial 1
+  - id: G07_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -2000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G07_MAX_d150 (MAX d=150.0), trial 2
+  - id: G07_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -2000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G07_MAX_d150 (MAX d=150.0), trial 3
+  - id: G08_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G08_MAX_d150 (MAX d=150.0), trial 1
+  - id: G08_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G08_MAX_d150 (MAX d=150.0), trial 2
+  - id: G08_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -1300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G08_MAX_d150 (MAX d=150.0), trial 3
+  - id: G09_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G09_MAX_d150 (MAX d=150.0), trial 1
+  - id: G09_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G09_MAX_d150 (MAX d=150.0), trial 2
+  - id: G09_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G09_MAX_d150 (MAX d=150.0), trial 3
+  - id: G10_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -800.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MAX
+    # source: G10_MAX_d150 (MAX d=150.0), trial 1
+  - id: G10_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -800.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MAX
+    # source: G10_MAX_d150 (MAX d=150.0), trial 2
+  - id: G10_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -800.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MAX
+    # source: G10_MAX_d150 (MAX d=150.0), trial 3
+  - id: H01_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 367.0, y: 169.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H01_MIN_d75 (MIN d=75.0), trial 1
+  - id: H01_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 367.0, y: 169.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H01_MIN_d75 (MIN d=75.0), trial 2
+  - id: H01_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 367.0, y: 169.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H01_MIN_d75 (MIN d=75.0), trial 3
+  - id: H02_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 478.0, y: -321.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H02_MIN_d75 (MIN d=75.0), trial 1
+  - id: H02_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 478.0, y: -321.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H02_MIN_d75 (MIN d=75.0), trial 2
+  - id: H02_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 478.0, y: -321.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H02_MIN_d75 (MIN d=75.0), trial 3
+  - id: H03_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -100.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H03_MIN_d75 (MIN d=75.0), trial 1
+  - id: H03_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -100.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H03_MIN_d75 (MIN d=75.0), trial 2
+  - id: H03_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -100.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H03_MIN_d75 (MIN d=75.0), trial 3
+  - id: H04_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 300.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H04_MIN_d75 (MIN d=75.0), trial 1
+  - id: H04_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 300.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H04_MIN_d75 (MIN d=75.0), trial 2
+  - id: H04_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 300.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H04_MIN_d75 (MIN d=75.0), trial 3
+  - id: H05_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -300.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H05_MIN_d75 (MIN d=75.0), trial 1
+  - id: H05_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -300.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H05_MIN_d75 (MIN d=75.0), trial 2
+  - id: H05_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -300.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H05_MIN_d75 (MIN d=75.0), trial 3
+  - id: H06_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 100.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H06_MIN_d75 (MIN d=75.0), trial 1
+  - id: H06_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 100.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H06_MIN_d75 (MIN d=75.0), trial 2
+  - id: H06_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 100.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H06_MIN_d75 (MIN d=75.0), trial 3
+  - id: H07_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -200.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H07_MIN_d75 (MIN d=75.0), trial 1
+  - id: H07_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -200.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H07_MIN_d75 (MIN d=75.0), trial 2
+  - id: H07_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -200.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H07_MIN_d75 (MIN d=75.0), trial 3
+  - id: H08_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -600.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H08_MIN_d75 (MIN d=75.0), trial 1
+  - id: H08_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -600.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H08_MIN_d75 (MIN d=75.0), trial 2
+  - id: H08_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -600.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H08_MIN_d75 (MIN d=75.0), trial 3
+  - id: H09_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 500.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H09_MIN_d75 (MIN d=75.0), trial 1
+  - id: H09_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 500.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H09_MIN_d75 (MIN d=75.0), trial 2
+  - id: H09_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: 500.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H09_MIN_d75 (MIN d=75.0), trial 3
+  - id: H10_RW_t1
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/MIN
+    # source: H10_MIN_d75 (MIN d=75.0), trial 1
+  - id: H10_RW_t2
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/MIN
+    # source: H10_MIN_d75 (MIN d=75.0), trial 2
+  - id: H10_RW_t3
+    mode: RANDOM_WALK
+    d: 75.0
+    start: {x: -500.0, y: 200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/MIN
+    # source: H10_MIN_d75 (MIN d=75.0), trial 3
+  - id: I01_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 627.0, y: -742.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I01_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I01_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 627.0, y: -742.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I01_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I01_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 627.0, y: -742.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I01_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I02_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -800.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I02_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I02_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -800.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I02_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I02_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -800.0, y: 400.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I02_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I03_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 50.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I03_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I03_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 50.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I03_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I03_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 50.0, y: 100.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I03_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I04_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1000.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I04_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I04_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1000.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I04_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I04_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1000.0, y: 600.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I04_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I05_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I05_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I05_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I05_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I05_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 200.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I05_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I06_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -200.0, y: -600.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I06_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I06_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -200.0, y: -600.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I06_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I06_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -200.0, y: -600.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I06_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I07_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1500.0, y: 300.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I07_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I07_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1500.0, y: 300.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I07_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I07_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -1500.0, y: 300.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I07_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I08_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 700.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I08_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I08_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 700.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I08_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I08_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 700.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I08_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I09_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -500.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I09_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I09_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -500.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I09_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I09_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: -500.0, y: 1000.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I09_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: I10_RW_t1
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 300.0, y: -1000.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/CT
+    # source: I10_CT_d10 (CROSSTRACK_CW d=10.0), trial 1
+  - id: I10_RW_t2
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 300.0, y: -1000.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/CT
+    # source: I10_CT_d10 (CROSSTRACK_CW d=10.0), trial 2
+  - id: I10_RW_t3
+    mode: RANDOM_WALK
+    d: 10.0
+    start: {x: 300.0, y: -1000.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/CT
+    # source: I10_CT_d10 (CROSSTRACK_CW d=10.0), trial 3
+  - id: J01_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 528.0, y: -447.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J01_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J01_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 528.0, y: -447.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J01_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J01_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 528.0, y: -447.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J01_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J02_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -100.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J02_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J02_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -100.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J02_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J02_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -100.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J02_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J03_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: -1200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J03_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J03_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: -1200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J03_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J03_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 200.0, y: -1200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J03_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J04_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -300.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J04_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J04_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -300.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J04_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J04_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -300.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J04_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J05_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J05_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J05_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J05_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J05_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -833.0, y: 669.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J05_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J06_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -500.0, y: 1100.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J06_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J06_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -500.0, y: 1100.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J06_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J06_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -500.0, y: 1100.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J06_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J07_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J07_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J07_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J07_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J07_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 300.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J07_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J08_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 100.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J08_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J08_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 100.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J08_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J08_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: 100.0, y: 500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J08_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J09_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -700.0, y: 1300.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J09_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J09_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -700.0, y: 1300.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J09_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J09_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -700.0, y: 1300.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J09_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: J10_RW_t1
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J10_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 1
+  - id: J10_RW_t2
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J10_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 2
+  - id: J10_RW_t3
+    mode: RANDOM_WALK
+    d: 150.0
+    start: {x: -200.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/RIDGE
+    # source: J10_RIDGE_d150 (RIDGE_DOWN d=150.0), trial 3
+  - id: K01_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -226.0, y: 1361.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K01_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K01_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -226.0, y: 1361.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K01_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K01_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -226.0, y: 1361.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K01_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K02_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2333.0, y: -1331.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K02_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K02_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2333.0, y: -1331.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K02_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K02_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2333.0, y: -1331.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K02_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K03_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -500.0, y: -2700.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K03_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K03_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -500.0, y: -2700.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K03_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K03_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -500.0, y: -2700.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K03_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K04_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -4076.0, y: -2524.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K04_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K04_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -4076.0, y: -2524.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K04_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K04_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -4076.0, y: -2524.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K04_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K05_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K05_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K05_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K05_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K05_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3000.0, y: 800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K05_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K06_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1800.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K06_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K06_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1800.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K06_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K06_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1800.0, y: -800.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K06_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K07_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2500.0, y: 1200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K07_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K07_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2500.0, y: 1200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K07_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K07_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2500.0, y: 1200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K07_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K08_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1500.0, y: 1500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K08_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K08_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1500.0, y: 1500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K08_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K08_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -1500.0, y: 1500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K08_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K09_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2000.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K09_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K09_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2000.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K09_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K09_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -2000.0, y: -200.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K09_TRENCH_d200 (TRENCH_UP d=200.0), trial 3
+  - id: K10_RW_t1
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3200.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 11
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K10_TRENCH_d200 (TRENCH_UP d=200.0), trial 1
+  - id: K10_RW_t2
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3200.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 22
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K10_TRENCH_d200 (TRENCH_UP d=200.0), trial 2
+  - id: K10_RW_t3
+    mode: RANDOM_WALK
+    d: 200.0
+    start: {x: -3200.0, y: -500.0, theta: 0.0}
+    random_walk_seed: 33
+    output_subdir: BASELINE/RW/TRENCH
+    # source: K10_TRENCH_d200 (TRENCH_UP d=200.0), trial 3

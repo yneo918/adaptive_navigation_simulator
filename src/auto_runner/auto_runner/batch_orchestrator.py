@@ -330,6 +330,26 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         rclpy.spin_once(orch, timeout_sec=0.1)
     orch.config_pub.publish(String(data=__import__('json').dumps(cfg)))
 
+    # 1b. For RANDOM_WALK baseline, push seed/period directly to adaptive_nav
+    # via ros2 param set (the parameter callback re-seeds the RNG immediately)
+    if mode in ('RANDOM_WALK', 'random_walk'):
+        seed = int(expt.get('random_walk_seed', 0))
+        period = int(expt.get(
+            'random_walk_period_steps',
+            defaults.get('random_walk_period_steps', 50)))
+        for param, val in [('random_walk_seed', seed),
+                           ('random_walk_period_steps', period)]:
+            try:
+                subprocess.run(
+                    ['ros2', 'param', 'set', '/adaptive_navigator',
+                     param, str(val)],
+                    check=True, capture_output=True, timeout=10.0)
+            except (subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired) as e:
+                print(f'[{eid}] WARN: ros2 param set {param}={val} failed: {e}',
+                      file=sys.stderr)
+        print(f'[{eid}] random_walk_seed={seed}, period={period}')
+
     # 2. Spawn the trajectory plotter, capturing its log for diagnostics
     shutil.rmtree(PLOTTER_OUTPUT_DIR, ignore_errors=True)
     os.makedirs(PLOTTER_OUTPUT_DIR, exist_ok=True)

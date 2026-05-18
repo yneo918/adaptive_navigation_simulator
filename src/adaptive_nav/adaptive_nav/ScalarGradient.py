@@ -53,6 +53,7 @@ class ControlMode(Enum):
     RIDGE_DOWN = ("ridge down", 0.0, 0.0, [-1.0, 1.0, -1.0], 5)
     TRENCH_UP = ("trench up", 0.0, 0.0, [1.0, -1.0, 1.0] , 5)
     TRENCH_DOWN = ("trench down", 0.0, 0.0, [-1.0, -1.0, 1.0] , 5)
+    RANDOM_WALK = ("random_walk", 0.0, 0.0, None, 3)  # baseline; ignores sensor
 
     def __init__(self, value: str, bearing_offset: float, gain: Optional[float], direction: Optional[List[float]], num_robots: int):
         self._value_ = value
@@ -105,6 +106,31 @@ class ScalarGradient:
         self.grad: List[float] = list() # Gradient vector of the cluster [X, Y, Z]
         self.curr_bearing = 0.0 # Current bearing angle of the cluster [rad]
         self.des_bearing = 0.0  # Desired bearing angle of the cluster [rad]
+
+        # RANDOM_WALK state (baseline mode):
+        # - rw_period: re-sample heading every N calls to get_velocity()
+        # - rw_rng: numpy Generator (seeded externally via set_random_walk_seed)
+        # - rw_heading: current heading angle in [0, 2pi)
+        # - rw_step_counter: counts calls since last heading change
+        self.rw_period: int = 50
+        self.rw_rng = np.random.default_rng()
+        self.rw_heading: float = 0.0
+        self.rw_step_counter: int = self.rw_period  # force resample on first call
+
+    def set_random_walk_params(self, period: int = 50, seed: int = 0) -> None:
+        """Configure the RANDOM_WALK baseline mode.
+
+        period: number of get_velocity() calls between heading re-samples
+        seed:   if > 0, seed the RNG deterministically for reproducibility
+                (default 0 = nondeterministic, fresh entropy each run)
+        """
+        self.rw_period = max(1, int(period))
+        if seed and seed > 0:
+            self.rw_rng = np.random.default_rng(int(seed))
+        else:
+            self.rw_rng = np.random.default_rng()
+        # Force resample at the next get_velocity() call
+        self.rw_step_counter = self.rw_period
 
         # List of 3 of the robots to form planar vectors
         # The first index is the tail, while the remaining second and third
@@ -227,8 +253,20 @@ class ScalarGradient:
             Optional[float]: Bearing angle [rad] of the cluster
         """
         # Assign to self if external params given
-        if zdes != None: 
+        if zdes != None:
             self.zdes = zdes
+
+        # RANDOM_WALK baseline: ignore sensor / gradient entirely.
+        # Re-sample heading every rw_period calls; otherwise hold previous heading.
+        if self.mode == ControlMode.RANDOM_WALK:
+            if self.rw_step_counter >= self.rw_period:
+                self.rw_heading = float(self.rw_rng.uniform(0.0, 2.0 * math.pi))
+                self.rw_step_counter = 0
+            self.rw_step_counter += 1
+            # Preserve internal-bearing fields for downstream logging consistency
+            self.curr_bearing = self.rw_heading
+            self.des_bearing = self.rw_heading
+            return self.rw_heading
 
         try:
             # Calculate gradient from robot positions

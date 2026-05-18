@@ -38,6 +38,8 @@ class ANNode(Node):
                 ('robot_id_list', ["p1", "p2", "p3", "p4", "p5"]),
                 ('sensor_msg_name', "sensor"),
                 ('time_scale', 1.0),
+                ('random_walk_period_steps', 50),
+                ('random_walk_seed', 0),
             ]
         )
         params = self._parameters
@@ -69,6 +71,14 @@ class ANNode(Node):
         self.set_pubsub()
 
         self.gradient = ScalarGradient(num_robots=len(self.robot_id_list))
+        # Apply RANDOM_WALK baseline parameters from launch / ros2 param
+        self.gradient.set_random_walk_params(
+            period=int(self.get_parameter('random_walk_period_steps').value),
+            seed=int(self.get_parameter('random_walk_seed').value),
+        )
+        # Re-apply if parameters are updated at runtime (e.g., by orchestrator
+        # via `ros2 param set` between baseline trials)
+        self.add_on_set_parameters_callback(self._on_param_change)
 
         self.future = [None] * len(self.robot_id_list)  # Store futures for each robot
 
@@ -125,6 +135,33 @@ class ANNode(Node):
                 self.gradient.mode = mode
                 if temp != mode:
                     self.get_logger().debug(f"Adaptive mode changed from {temp.value} to {mode.value}")
+
+    def _on_param_change(self, params):
+        """Apply runtime parameter changes to ScalarGradient state.
+
+        Used by the baseline orchestrator to switch random_walk_seed between
+        trials without restarting the node.
+        """
+        from rcl_interfaces.msg import SetParametersResult
+        need_reseed = False
+        for p in params:
+            if p.name in ('random_walk_period_steps', 'random_walk_seed'):
+                need_reseed = True
+        if need_reseed:
+            # Read current values (the new ones get applied after this callback
+            # returns successful, so use param p.value if it's the changed one)
+            new_period = int(self.get_parameter('random_walk_period_steps').value)
+            new_seed = int(self.get_parameter('random_walk_seed').value)
+            for p in params:
+                if p.name == 'random_walk_period_steps':
+                    new_period = int(p.value)
+                elif p.name == 'random_walk_seed':
+                    new_seed = int(p.value)
+            self.gradient.set_random_walk_params(period=new_period, seed=new_seed)
+            self.get_logger().info(
+                f'RANDOM_WALK reconfigured: period={new_period}, seed={new_seed}'
+            )
+        return SetParametersResult(successful=True)
 
     def _z_des_callback(self, msg: Float64):
         """Update CROSSTRACK target contour value from external publisher."""
