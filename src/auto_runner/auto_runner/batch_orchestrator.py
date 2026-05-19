@@ -146,6 +146,10 @@ def spawn_plotter(plotter_dir: str, sample_interval: float,
         '-p', f'trajectory_sample_interval:={sample_interval}',
         '-p', 'visualization_mode:=contour',  # avoid blocking 3D show
         '-p', 'show_plot:=false',  # no GUI popup in batch mode
+        # cesium_field.yaml uses distance_scale=0.05 (1 sim unit = 20 m real)
+        # so display_scale_xy = 1/0.05 = 20 -> axis values in real meters.
+        '-p', 'sensor_distance_scale:=0.05',
+        '-p', 'original_coordinate_unit:=m',
     ]
     if log_path:
         log_f = open(log_path, 'w')
