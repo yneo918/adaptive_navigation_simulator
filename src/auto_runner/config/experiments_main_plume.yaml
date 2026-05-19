@@ -1,0 +1,72 @@
+# Special experiments: RIDGE_DOWN along the main NW plume from the global peak.
+#
+# The Fukushima cesium-137 field has its global maximum at sim (502, -315),
+# corresponding to (-3.3 km, 0.3 km) from FDNPP (10.7 MBq/m^2). The main
+# contamination plume extends from this peak toward the northwest for ~50 km,
+# with z slowly declining from 1.00 (peak) to ~0.50 (60 km NW). The ridge
+# crest is well-defined for the first ~35 km, then weakens.
+#
+# These runs target "RIDGE_DOWN along the main plume from near the global
+# peak" as a paper-headline demonstration of long-distance ridge descent on
+# real disaster data.
+#
+# All three configurations use theta = 3*pi/4 (= 2.3562 rad, 135 deg, NW
+# orientation) so the cluster's longitudinal axis (+X local) aligns with
+# the NW ridge axis from the start. This eliminates initial rotation
+# overhead and lets g_hat_x measure descent direction directly.
+
+defaults:
+  trajectory_sample_interval: 0.5
+  max_steps: 5000
+  time_limit_s: 4500
+  plateau_window_steps: 1000
+  plateau_eps: 0.5
+  net_disp_eps: 2.0
+  z_range_eps: 0.005
+  stable_motion_window_steps: 200
+  stable_motion_span_eps: 5.0
+  oob_threshold: 0.12
+  oob_window_steps: 500
+  progress_every_steps: 200
+  warmup_s: 5.0
+  cooldown_s: 2.0
+
+experiments:
+  # ============================================================
+  # Configuration A (recommended): Plateau-edge start, well-formed ridge
+  # ----------------------------------------------------------------
+  # Start position: 20 km NW of global peak, at the plateau end where the
+  # ridge has begun to show longitudinal slope but lateral walls are still
+  # strong. z_init = 0.90, with ~40 km of descent terrain ahead.
+  # Aperture d = 200 matches the NW plume's typical width (~5-10 km).
+  # Cluster heading 3*pi/4 (NW) aligns +X with the descent direction.
+  - id: M01_RIDGE_DOWN_A_plateau_edge
+    mode: RIDGE_DOWN
+    d: 200.0
+    start: {x: -200.0, y: 400.0, theta: 2.3562}  # 3*pi/4 = NW
+    output_subdir: SPECIAL/MAIN_PLUME
+
+  # ============================================================
+  # Configuration B (literal "from global peak"): start at peak vicinity
+  # ----------------------------------------------------------------
+  # Start position: 5 km NW of true global peak. Closer to peak than A,
+  # but the first ~10-15 km is on a nearly-flat plateau (z = 0.85-0.92),
+  # so initial gradient is weak. Expect early wobble before cluster
+  # latches onto descent direction.
+  - id: M02_RIDGE_DOWN_B_near_peak
+    mode: RIDGE_DOWN
+    d: 200.0
+    start: {x: 300.0, y: -100.0, theta: 2.3562}  # NW orientation
+    output_subdir: SPECIAL/MAIN_PLUME
+
+  # ============================================================
+  # Configuration C: Already-descending segment, tighter cluster
+  # ----------------------------------------------------------------
+  # Start position: 25 km NW of global peak, where descent has begun
+  # (z=0.80). Tighter aperture d=150 (= 3 km cluster) for higher local
+  # detail. Expect shorter but cleaner RIDGE_DOWN traversal.
+  - id: M03_RIDGE_DOWN_C_short_descent
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -400.0, y: 600.0, theta: 2.3562}  # NW
+    output_subdir: SPECIAL/MAIN_PLUME
