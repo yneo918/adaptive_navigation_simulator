@@ -25,8 +25,15 @@
 #
 # Verified results (pure_sim, 20000 steps)
 # ----------------------------------------
-# MP01: 5.5 km NW descent, path 15.6 km, all robots on land at end,
-#       Δz_5robot = -0.05.
+# MP01: 5.5 km NW descent along plume axis, path 15.6 km, all on land,
+#       Δz_5robot = -0.05. Cluster descends from z@p1 ≈ 0.87 to ≈ 0.5.
+# MP02: same start as MP01 with theta=0° → identical end position
+#       (cluster self-aligns, theta-insensitive at the plume crest).
+#
+# Mid-plume start (r=20 km from peak) was tested and rejected:
+# the cluster falls off the plume axis and descends laterally
+# (35 km SE motion, -16.8 km NW projection). 5-robot RIDGE_DOWN on real
+# disaster data only tracks the ridge axis when started near the source.
 
 defaults:
   trajectory_sample_interval: 0.5
@@ -63,11 +70,3 @@ experiments:
     start: {x: 179.0, y: -82.0, theta: 0.0}
     output_subdir: SPECIAL/MAIN_PLUME
 
-  # MP03 (mid-plume): P1 20 km NW of peak (= 18 km NW of FDNPP), d=500.
-  # FDNPP-centered (-979, +594). Raw sim (-312, +263).
-  # Continues the descent demonstration further from the source.
-  - id: MP03_RIDGE_DOWN_d500_mid
-    mode: RIDGE_DOWN
-    d: 500.0
-    start: {x: -312.0, y: 263.0, theta: 2.8798}   # theta = 165° (WNW-W)
-    output_subdir: SPECIAL/MAIN_PLUME
