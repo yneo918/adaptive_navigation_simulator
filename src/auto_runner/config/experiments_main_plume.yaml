@@ -29,11 +29,11 @@
 #       Δz_5robot = -0.05. Cluster descends from z@p1 ≈ 0.87 to ≈ 0.5.
 # MP02: same start as MP01 with theta=0° → identical end position
 #       (cluster self-aligns, theta-insensitive at the plume crest).
-#
-# Mid-plume start (r=20 km from peak) was tested and rejected:
-# the cluster falls off the plume axis and descends laterally
-# (35 km SE motion, -16.8 km NW projection). 5-robot RIDGE_DOWN on real
-# disaster data only tracks the ridge axis when started near the source.
+# MP03: mid-plume start (r=20 km from peak), distinct behavior — cluster
+#       falls off the plume axis and descends laterally (35 km path,
+#       Δz=-0.31, NW projection -16.8 km). Kept as a counter-example
+#       showing how starting position determines whether RIDGE_DOWN
+#       traces the plume axis or finds a lateral descent.
 
 defaults:
   trajectory_sample_interval: 0.5
@@ -68,5 +68,19 @@ experiments:
     mode: RIDGE_DOWN
     d: 500.0
     start: {x: 179.0, y: -82.0, theta: 0.0}
+    output_subdir: SPECIAL/MAIN_PLUME
+
+  # MP03 (mid-plume, special case): P1 20 km NW of peak, theta=165°.
+  # FDNPP-centered (-979, +594). Raw sim (-312, +263).
+  # Pure_sim showed a distinct off-axis descent (35 km path, ends ~22 km
+  # SE/S of start, Δz=-0.31). All 5 robots remain on land. Included as
+  # a contrast to MP01/MP02: demonstrates how a cluster started off the
+  # source-proximity zone falls off the plume axis and follows a local
+  # lateral gradient instead. Interesting trajectory in its own right —
+  # the cluster traverses a large region and reaches very low z (~0.3).
+  - id: MP03_RIDGE_DOWN_d500_mid
+    mode: RIDGE_DOWN
+    d: 500.0
+    start: {x: -312.0, y: 263.0, theta: 2.8798}   # theta = 165°
     output_subdir: SPECIAL/MAIN_PLUME
 
