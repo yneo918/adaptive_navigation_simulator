@@ -1,39 +1,43 @@
-# Main-plume RIDGE_DOWN demonstrations: aperture sweep.
+# Main-plume RIDGE_DOWN: P1 on plume + cluster descends NW + all on land.
 #
-# Background
-# ----------
-# Pure-Python simulator (scripts/pure_sim/pure_sim.py) was used to
-# pre-screen RIDGE_DOWN behavior on the Fukushima cesium-137 field from
-# near the global peak (sim (502, -315) = 10.7 MBq/m^2). The original
-# d=150-200 configurations (4 km cluster) produced **local wandering**
-# (path/net ratio 4-10) rather than long-range plume descent.
+# Goal
+# ----
+# Demonstrate the cluster tracing the cesium-137 plume from near the
+# FDNPP source (the true global maximum, partially obscured by the
+# no-go-zone data gap) NW along the plume axis. The leader (P1) starts
+# on the plume crest; the cluster autonomously descends along the
+# ridge axis using 5-robot RIDGE_DOWN.
 #
-# Large-aperture probes revealed an aperture trade-off:
-#   d=200  (4 km)  : wandering, net 1-5 km
-#   d=500  (10 km) : modest improvement, net 7 km
-#   d=1000 (20 km) : long path (50 km) but still wandering (net 15 km)
-#   d=2000 (40 km) : **straight long descent**, net 17-20 km, ratio 1.6-1.7
+# Key calibration (pure_sim ablation, 2026-05-20)
+# -----------------------------------------------
+# 1. True plume axis direction = math 145° (WNW) from peak at FDNPP
+#    (-160, +20) sim, not pure 135° NW.
+# 2. d=500 (10 km cluster) is the sweet spot:
+#    - small enough to keep all 5 robots on land (FDNPP is coastal;
+#      p4 in larger clusters drifts offshore east of FDNPP).
+#    - large enough that the 5-robot gradient sees the plume cleanly.
+# 3. theta is not critical near the source — the cluster self-aligns
+#    with the local ridge structure within the first ~500 steps.
+#    theta=-90° (cluster facing S) is a robust default.
+# 4. Starting position: ~8 km NW of FDNPP on plume crest, near enough
+#    to the source that z@p1 ≈ 0.87, far enough that the no-go-zone
+#    gap doesn't dominate the 5-robot gradient.
 #
-# Interpretation: when d >= plume width (~10-20 km), the 5-robot RIDGE_DOWN
-# algorithm integrates the global plume gradient rather than chasing local
-# micro-ridges. This is the central evidence for the paper's aperture
-# trade-off thesis applied to RIDGE/TRENCH primitives.
-#
-# Configurations below test this on ROS sim with bounds-safe starts
-# (all 5 robots stay within the cesium map). theta = 3*pi/4 (= 2.3562 rad,
-# NW orientation) aligns the cluster +X local axis with the NW plume axis
-# so g_hat_x measures the descent direction directly.
+# Verified results (pure_sim, 20000 steps)
+# ----------------------------------------
+# MP01: 5.5 km NW descent, path 15.6 km, all robots on land at end,
+#       Δz_5robot = -0.05.
 
 defaults:
   trajectory_sample_interval: 0.5
-  max_steps: 10000
-  time_limit_s: 9000
+  max_steps: 20000
+  time_limit_s: 18000
   plateau_window_steps: 2000
   plateau_eps: 0.3
   net_disp_eps: 2.0
   z_range_eps: 0.005
   stable_motion_window_steps: 500
-  stable_motion_span_eps: 10.0
+  stable_motion_span_eps: 5.0
   oob_threshold: 0.05
   oob_window_steps: 500
   progress_every_steps: 500
@@ -41,53 +45,29 @@ defaults:
   cooldown_s: 2.0
 
 experiments:
-  # ============================================================
-  # Aperture sweep from same plateau-edge start
-  # (FDNPP-centered: (-867, 731)  ~17 km NW of FDNPP, plateau end)
-  # ============================================================
-
-  # Reference: small aperture (paper baseline d) for direct comparison.
-  # Pure-sim predicted local wandering (~4 km net displacement).
-  - id: ML01_RIDGE_DOWN_d500_plateau
+  # MP01 (primary): P1 8 km NW of FDNPP on plume crest, d=500, theta=-90°.
+  # FDNPP-centered start (-488, +249). Raw sim (179, -82).
+  # Expected: 5-6 km NW descent, all 5 robots stay on land throughout.
+  - id: MP01_RIDGE_DOWN_d500_source
     mode: RIDGE_DOWN
     d: 500.0
-    start: {x: -200.0, y: 400.0, theta: 2.3562}
+    start: {x: 179.0, y: -82.0, theta: -1.5708}   # theta = -90° (S heading)
     output_subdir: SPECIAL/MAIN_PLUME
 
-  # Medium aperture (~ plume width / 2). Pure-sim: long path (50 km) but
-  # still wandering (15 km net).
-  - id: ML02_RIDGE_DOWN_d1000_plateau
+  # MP02 (confirmation): same start as MP01, theta=0° (E heading).
+  # Cluster self-aligns to the same end position — confirms RIDGE_DOWN
+  # behavior is theta-insensitive near the plume crest.
+  - id: MP02_RIDGE_DOWN_d500_theta0
     mode: RIDGE_DOWN
-    d: 1000.0
-    start: {x: -200.0, y: 400.0, theta: 2.3562}
+    d: 500.0
+    start: {x: 179.0, y: -82.0, theta: 0.0}
     output_subdir: SPECIAL/MAIN_PLUME
 
-  # ============================================================
-  # Large aperture (>= plume width): straight long-range descent
-  # Bounds-safe starts (start moved further NW so the 5-robot
-  # footprint of d=2000 cluster fits inside the map).
-  # ============================================================
-
-  # FDNPP-centered: (-1500, 200), 27 km NW of peak, on plume axis.
-  # Pure-sim: ~33 km path, 20 km net descent (ratio 1.7).
-  - id: ML03_RIDGE_DOWN_d2000_plateau
+  # MP03 (mid-plume): P1 20 km NW of peak (= 18 km NW of FDNPP), d=500.
+  # FDNPP-centered (-979, +594). Raw sim (-312, +263).
+  # Continues the descent demonstration further from the source.
+  - id: MP03_RIDGE_DOWN_d500_mid
     mode: RIDGE_DOWN
-    d: 2000.0
-    start: {x: -833.0, y: -131.0, theta: 2.3562}
-    output_subdir: SPECIAL/MAIN_PLUME
-
-  # FDNPP-centered: (-967, 231), 17 km NW of peak.
-  # Pure-sim: 49 km path, 7 km net (wandering near peak).
-  - id: ML04_RIDGE_DOWN_d1000_near_peak
-    mode: RIDGE_DOWN
-    d: 1000.0
-    start: {x: -300.0, y: -100.0, theta: 2.3562}
-    output_subdir: SPECIAL/MAIN_PLUME
-
-  # FDNPP-centered: (-1500, 0), 27 km NW of peak.
-  # Pure-sim: 28 km path, 17.7 km net (largest Δz=-0.12).
-  - id: ML05_RIDGE_DOWN_d2000_near_peak
-    mode: RIDGE_DOWN
-    d: 2000.0
-    start: {x: -833.0, y: -331.0, theta: 2.3562}
+    d: 500.0
+    start: {x: -312.0, y: 263.0, theta: 2.8798}   # theta = 165° (WNW-W)
     output_subdir: SPECIAL/MAIN_PLUME
