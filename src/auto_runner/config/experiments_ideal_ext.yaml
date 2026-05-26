@@ -1,0 +1,167 @@
+# Extended-max_steps re-run of the runs that hit max_steps=5000 in
+# experiments_ideal.yaml (MAX/MIN/RIDGE/TRENCH; CROSSTRACK excluded).
+#
+# Rationale
+# ---------
+# pure_sim verification (2026-05-26) showed these 21 runs were truncated
+# by max_steps=5000 *before convergence*. Most reach their saddle/extremum
+# (axial gradient g_x -> 0, or position parked) only at step 6000-12000.
+# max_steps=5000 is a safety cap against non-terminating loops, NOT a
+# convergence criterion, so truncated-but-unconverged runs are invalid for
+# performance scoring. This config re-runs ONLY the 21 truncated runs with
+# max_steps=20000 so each reaches its true convergence point. The 19
+# already-converged runs (n_steps < 4800) are NOT re-run (use existing data).
+#
+# pure_sim convergence steps (reference): 19/21 parked within 551-11869
+# steps; J02_RIDGE and J08_RIDGE did not park by 20000 (J08 reached saddle
+# g_x->0 at step ~12800; J02 remained unconverged).
+#
+# Output goes to IDEAL_EXT/<MODE> to avoid overwriting the original IDEAL/
+# data; merge during post-hoc analysis.
+#
+# Coordinate system: identical to experiments_ideal.yaml
+#   sim origin: (37.480654N, 140.881685E), distance_scale=0.05
+#   FDNPP sim:  (667.0, -331.1);  d_real_m = d * 20
+#
+# Run:
+#   ros2 run auto_runner batch_orchestrator \
+#     --config <pkg>/config/experiments_ideal_ext.yaml \
+#     --output-root ~/git_repos/paper/data
+# Est. wall time @ time_scale=10: ~16 min/run worst case, ~3-4 h total.
+
+defaults:
+  trajectory_sample_interval: 0.5
+  max_steps: 20000                 # 0.5s/step * 20000 = 10000s sim
+  time_limit_s: 18000              # 1.8x max_steps duration (safety cap)
+
+  # Convergence checks (OR-combined) — unchanged from experiments_ideal.yaml.
+  # Post-hoc g_x->0 (saddle) criterion is applied during analysis; these
+  # position-based checks stop genuinely parked clusters early.
+  plateau_window_steps: 1000
+  plateau_eps: 0.5
+  net_disp_eps: 2.0
+  z_range_eps: 0.005
+  stable_motion_window_steps: 200
+  stable_motion_span_eps: 5.0
+
+  # Out-of-area: sea / data-sparse / zero deposition zones
+  oob_threshold: 0.12
+  oob_window_steps: 500
+
+  progress_every_steps: 500
+  warmup_s: 5.0
+  cooldown_s: 2.0
+
+experiments:
+  # ---- MAX (6 truncated runs) ----
+  - id: G03_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -1500.0, y: 200.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+  - id: G04_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -200.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+  - id: G05_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -450.0, y: -500.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+  - id: G06_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: 200.0, y: 600.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+  - id: G07_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -2000.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+  - id: G10_MAX_d150
+    mode: MAX
+    d: 150.0
+    start: {x: -800.0, y: 1000.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MAX
+
+  # ---- MIN (4 truncated runs) ----
+  - id: H02_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: 478.0, y: -321.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MIN
+  - id: H03_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -100.0, y: 400.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MIN
+  - id: H05_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -300.0, y: 600.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MIN
+  - id: H07_MIN_d75
+    mode: MIN
+    d: 75.0
+    start: {x: -200.0, y: 500.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/MIN
+
+  # ---- RIDGE_DOWN (4 truncated runs) ----
+  - id: J02_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -100.0, y: 800.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/RIDGE
+  - id: J06_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -500.0, y: 1100.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/RIDGE
+  - id: J08_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: 100.0, y: 500.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/RIDGE
+  - id: J10_RIDGE_d150
+    mode: RIDGE_DOWN
+    d: 150.0
+    start: {x: -200.0, y: -800.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/RIDGE
+
+  # ---- TRENCH_UP (7 truncated runs) ----
+  - id: K01_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -226.0, y: 1361.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K03_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -500.0, y: -2700.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K04_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -4076.0, y: -2524.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K07_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -2500.0, y: 1200.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K08_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -1500.0, y: 1500.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K09_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -2000.0, y: -200.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
+  - id: K10_TRENCH_d200
+    mode: TRENCH_UP
+    d: 200.0
+    start: {x: -3200.0, y: -500.0, theta: 0.0}
+    output_subdir: IDEAL_EXT/TRENCH
