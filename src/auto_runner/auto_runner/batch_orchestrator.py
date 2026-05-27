@@ -53,6 +53,9 @@ class Orchestrator(Node):
 
     def __init__(self):
         super().__init__('batch_orchestrator')
+        # Tracks the plotter of the currently running experiment so abort paths
+        # can reap it; set in run_one_experiment, cleared after each clean stop.
+        self._active_plotter = None
         self.config_pub = self.create_publisher(String, '/auto/config', 10)
         self.start_pub = self.create_publisher(Bool, '/auto/start', 10)
         self.stop_pub = self.create_publisher(Bool, '/auto/stop', 10)
@@ -196,6 +199,25 @@ def stop_plotter(proc: subprocess.Popen, save_timeout_s: float = 60.0,
         except subprocess.TimeoutExpired:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             return 'sigkill'
+
+
+def kill_plotter_group(proc) -> None:
+    """Best-effort hard kill of a plotter and its whole process group.
+
+    Used on abort/error paths (Ctrl+C -> RCLError, unexpected exceptions,
+    KeyboardInterrupt). Unlike stop_plotter(), this does NOT send SIGINT and
+    does NOT wait for an NPZ save: an aborted run never reaches the step-8 NPZ
+    move, so a partial save would only linger in the plotter output dir and be
+    wiped by the next run. The point here is purely to prevent orphans, since
+    the plotter runs in its own session (os.setsid) and is therefore immune to
+    the terminal's Ctrl+C. A no-op if proc is None or already exited.
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        pass
 
 
 def already_completed(output_root: str, expt: dict) -> str | None:
@@ -381,6 +403,9 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     plotter_log = os.path.join(PLOTTER_OUTPUT_DIR, f'{eid}_plotter.log')
     plotter = spawn_plotter(PLOTTER_OUTPUT_DIR, sample_interval,
                             log_path=plotter_log)
+    # Record the in-flight plotter so abort/error paths in main() can reap it;
+    # cleared again after every clean stop_plotter() below.
+    orch._active_plotter = plotter
     print(f'[{eid}] plotter spawned (pid={plotter.pid}, log={plotter_log})')
 
     # 3. Wait for plotter terrain ingestion + first leader pose
@@ -400,6 +425,7 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     if not orch.wait_for_leader(timeout_s=15.0):
         print(f'[{eid}] ERROR: leader pose never received', file=sys.stderr)
         stop_plotter(plotter)
+        orch._active_plotter = None
         return False
 
     # Settle for ~2s after pose set so robots are stationary at start
@@ -459,6 +485,7 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         rclpy.spin_once(orch, timeout_sec=0.05)
     print(f'[{eid}] SIGINT plotter ...')
     status = stop_plotter(plotter, verbose=True)
+    orch._active_plotter = None
     print(f'[{eid}] plotter {status}')
 
     # Brief grace for filesystem flush after the plotter exits
@@ -596,12 +623,20 @@ def main(argv=None):
             except RCLError as e:
                 print(f'\n[ABORT] RCL error during {expt["id"]}: {e}',
                       file=sys.stderr)
+                # Plotter is in its own session and survives Ctrl+C; reap it so
+                # the aborted run does not leave an orphan holding the output dir.
+                kill_plotter_group(getattr(orch, '_active_plotter', None))
+                orch._active_plotter = None
                 failures.append(expt['id'])
                 aborted_idx = idx
                 break
             except Exception as e:  # noqa: BLE001 - keep batch alive on unexpected
                 print(f'\n[FAIL] {expt["id"]}: {type(e).__name__}: {e}',
                       file=sys.stderr)
+                # Same: this branch continues to the next run, so reap the
+                # current plotter here or it accumulates one orphan per failure.
+                kill_plotter_group(getattr(orch, '_active_plotter', None))
+                orch._active_plotter = None
                 failures.append(expt['id'])
                 continue
 
@@ -615,6 +650,9 @@ def main(argv=None):
                 pass
             time.sleep(2.0)
     finally:
+        # Final safety net for any exit path (incl. KeyboardInterrupt, which
+        # bypasses the per-run `except Exception`): never leave a live plotter.
+        kill_plotter_group(getattr(orch, '_active_plotter', None))
         try:
             orch.destroy_node()
         except Exception:
