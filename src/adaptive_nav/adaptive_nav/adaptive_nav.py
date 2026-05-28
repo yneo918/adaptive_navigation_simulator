@@ -29,6 +29,15 @@ MAX_VEL_CLUSTER = 0.1
 MAX_VEL_ROT_CLUSTER = 0.1
 Z_DES = 0.6
 
+# Stuck-escape (false-convergence recovery): when the experiment detects a
+# convergence/plateau, the orchestrator asks the cluster to rotate about its
+# centroid by a fixed angle. This re-samples the field and breaks the
+# multi-peak capture where 3-4 sample points each latch onto a different peak.
+# omega is derived from the per-robot speed budget so no robot exceeds its
+# limit during the rotation: omega*(r_max + 1) <= ROBOT_MAX_VEL.
+ESCAPE_KAPPA = 0.8       # safety margin on the per-robot speed budget
+ROBOT_MAX_VEL = 10.0     # per-robot |linear|+|angular| cap (controller MAX_VEL)
+
 class ANNode(Node):
     def __init__(self):
         super().__init__('adaptive_navigator')
@@ -92,12 +101,23 @@ class ANNode(Node):
         self.z = DESIRED_SENSOR  # Desired sensor value for the robot to navigate towards, in dBm
         self.z_des = Z_DES  # Desired contour value for CROSSTRACK; overridable via /ctrl/z_des
 
+        # Stuck-escape FSM state (driven by /ctrl/an_escape)
+        self._escaping = False
+        self._escape_target = 0.0       # target |Delta theta| [rad]
+        self._escape_accum = 0.0        # accumulated |Delta theta| since entry [rad]
+        self._escape_prev_theta = 0.0   # last measured cluster heading [rad]
+        self._escape_omega = 0.0        # rotation rate [rad/s], CCW (+)
+
     def set_pubsub(self):
         """Set up publishers and subscribers."""
         self.pubsub.create_publisher(Twist, '/ctrl/cmd_vel', 5) #publish to cluster
         self.pubsub.create_subscription(String, '/ctrl/adaptive_mode', self.update_adaptive_mode, 1)
         self.pubsub.create_subscription(String, '/ctrl/cluster_mode', self._mode_callback, 1)
         self.pubsub.create_subscription(Float64, '/ctrl/z_des', self._z_des_callback, 1)
+        # Escape command: positive value = target rotation angle [rad]; <=0 cancels.
+        self.pubsub.create_subscription(Float64, '/ctrl/an_escape', self._escape_callback, 1)
+        # Escape status: True while a rotation maneuver is in progress.
+        self.pubsub.create_publisher(Bool, '/ctrl/an_escape_active', 1)
         self.pubsub.create_subscription(Pose2D, '/rviz/goal_pose2D', self._goal_callback, 10)
         for robot_id in self.robot_id_list:
             self.pubsub.create_subscription(
@@ -176,6 +196,88 @@ class ANNode(Node):
             self.enable = True
         else:
             self.enable = False
+            self._escaping = False  # never rotate while navigation is disabled
+
+    def _escape_callback(self, msg: Float64):
+        """Start (or cancel) a stuck-escape rotation about the cluster centroid.
+
+        msg.data > 0: target rotation angle [rad] (relative to the heading at
+        entry). msg.data <= 0: cancel any rotation in progress.
+        """
+        target = float(msg.data)
+        if target > 0.0:
+            if self.enable and not self._escaping:
+                self._begin_escape(target)
+        else:
+            if self._escaping:
+                self.get_logger().info("ESCAPE cancelled by command")
+            self._escaping = False
+
+    def _begin_escape(self, target_angle):
+        """Latch escape state and derive the rotation rate from robot speed limits."""
+        centroid = self._cluster_centroid()
+        r_max = max(
+            float(np.linalg.norm(self._get_robot_position_2d(i) - centroid))
+            for i in range(self.num_robots)
+        )
+        # Per-robot budget |linear| + |angular| <= ROBOT_MAX_VEL, with the
+        # farthest robot at linear = omega*r_max and angular = omega (the body
+        # spins with the formation). Solve for omega and apply a safety margin.
+        self._escape_omega = ESCAPE_KAPPA * ROBOT_MAX_VEL / (r_max + 1.0)
+        self._escape_target = float(target_angle)
+        self._escape_accum = 0.0
+        self._escape_prev_theta = self._cluster_heading()
+        self._escaping = True
+        self.get_logger().info(
+            f"ESCAPE start: target={target_angle:.3f} rad, r_max={r_max:.2f}, "
+            f"omega={self._escape_omega:.4f} rad/s")
+
+    def _cluster_centroid(self):
+        """Geometric centroid (x, y) of all robots."""
+        pts = np.array([self._get_robot_position_2d(i)
+                        for i in range(self.num_robots)])
+        return pts.mean(axis=0)
+
+    def _cluster_heading(self):
+        """Cluster heading [rad] matching PentagonLeaderConfig fkine:
+        theta_c = atan2(r2 - r1) - pi/2."""
+        r1 = self._get_robot_position_2d(0)
+        r2 = self._get_robot_position_2d(1)
+        return math.atan2(r2[1] - r1[1], r2[0] - r1[0]) - math.pi / 2
+
+    @staticmethod
+    def _wrap_pi(angle):
+        return (angle + math.pi) % (2.0 * math.pi) - math.pi
+
+    def _compute_escape_cmd(self):
+        """Rigid rotation of the formation about its centroid at omega (CCW).
+
+        The cluster origin O (= leader p1) must orbit the centroid C, so command
+        v_O(world) = omega * z_hat x (O - C), expressed in the cluster body frame
+        (the controller rotates body->world by R(theta_c)). Completion is judged
+        on the measured heading change (closed loop), not commanded time.
+        """
+        O = self._get_robot_position_2d(0)
+        C = self._cluster_centroid()
+        theta = self._cluster_heading()
+        w = self._escape_omega
+
+        dx, dy = O[0] - C[0], O[1] - C[1]
+        vox, voy = -w * dy, w * dx           # omega * z_hat x (O - C), world frame
+        ct, st = math.cos(theta), math.sin(theta)
+        cmd_vel = Twist()
+        cmd_vel.linear.x = ct * vox + st * voy   # R(-theta) -> body frame
+        cmd_vel.linear.y = -st * vox + ct * voy
+        cmd_vel.angular.z = w
+
+        # Accumulate the actual rotation achieved.
+        self._escape_accum += abs(self._wrap_pi(theta - self._escape_prev_theta))
+        self._escape_prev_theta = theta
+        if self._escape_accum >= self._escape_target:
+            self._escaping = False
+            self.get_logger().info(
+                f"ESCAPE done: rotated {self._escape_accum:.3f} rad")
+        return cmd_vel
     
     def _goal_callback(self, msg: Pose2D):
         self.goal = [msg.x, msg.y, msg.theta]
@@ -423,6 +525,12 @@ class ANNode(Node):
         """Compute gradient and publish velocity commands."""
         cmd_vel = None
 
+        # Stuck-escape overrides normal AN control: rotate about the centroid.
+        if self._escaping:
+            cmd_vel = self._compute_escape_cmd()
+            self.pubsub.publish('/ctrl/cmd_vel', cmd_vel)
+            return
+
         if self.gradient.mode.num_robots == 3:
             cmd_vel = self._compute_velocity_3_robot_mode()
             if cmd_vel is None:
@@ -441,6 +549,8 @@ class ANNode(Node):
 
     def publish_velocities_manager(self):
         """ Manage which velocities to publish based on the current output mode."""
+        # Always advertise escape status so the orchestrator can await completion.
+        self.pubsub.publish('/ctrl/an_escape_active', Bool(data=self._escaping))
         if self.enable:
             self.publish_velocities()
 

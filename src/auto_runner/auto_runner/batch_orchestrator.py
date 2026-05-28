@@ -60,6 +60,12 @@ class Orchestrator(Node):
         self.start_pub = self.create_publisher(Bool, '/auto/start', 10)
         self.stop_pub = self.create_publisher(Bool, '/auto/stop', 10)
         self.pose_pub = self.create_publisher(Pose2D, '/rviz/pose2D', 10)
+        # Stuck-escape: ask the AN node to rotate about the centroid (target
+        # angle [rad]); _escape_active tracks whether that rotation is running.
+        self.escape_pub = self.create_publisher(Float64, '/ctrl/an_escape', 10)
+        self._escape_active = False
+        self.create_subscription(
+            Bool, '/ctrl/an_escape_active', self._on_escape_active, 10)
 
         self._leader_xy = None
         self._leader_history = collections.deque(maxlen=4000)
@@ -82,6 +88,9 @@ class Orchestrator(Node):
 
     def _on_robot_sensor(self, msg: Float64, robot_id: str):
         self._robot_z[robot_id] = float(msg.data)
+
+    def _on_escape_active(self, msg: Bool):
+        self._escape_active = bool(msg.data)
 
     def wait_for_leader(self, timeout_s: float = 30.0) -> bool:
         deadline = time.time() + timeout_s
@@ -337,6 +346,43 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
     return False, ''
 
 
+# Termination reasons that represent a (possibly false) CONVERGENCE, as opposed
+# to hard caps (max_steps/time_limit) or leaving the data region (out-of-area).
+# Only these are eligible for the stuck-escape rotation.
+_CONVERGENCE_PREFIXES = ('plateau', 'net_disp', 'z_c stable')
+
+
+def _is_convergence(reason: str) -> bool:
+    return reason.startswith(_CONVERGENCE_PREFIXES)
+
+
+def do_escape(orch: 'Orchestrator', angle: float,
+              timeout_s: float = 120.0, act_timeout_s: float = 5.0) -> bool:
+    """Command a centroid-rotation escape and block until the AN node finishes.
+
+    Publishes the target angle [rad] on /ctrl/an_escape, then spins until the
+    node reports it started (an_escape_active True) and then completed (False).
+    Always clears the command afterwards so a stale value cannot re-trigger.
+    Returns True if the rotation actually ran.
+    """
+    for _ in range(3):  # a few publishes in case of drops
+        orch.escape_pub.publish(Float64(data=float(angle)))
+        rclpy.spin_once(orch, timeout_sec=0.02)
+    seen_active = False
+    start = time.time()
+    while time.time() - start < timeout_s:
+        rclpy.spin_once(orch, timeout_sec=0.05)
+        if orch._escape_active:
+            seen_active = True
+        elif seen_active:
+            break  # was active, now finished
+        elif time.time() - start > act_timeout_s:
+            break  # never acknowledged (e.g. node disabled) -> give up
+    orch.escape_pub.publish(Float64(data=0.0))
+    rclpy.spin_once(orch, timeout_sec=0.05)
+    return seen_active
+
+
 def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
                        output_root: str) -> bool:
     """Execute a single experiment. Return True on success."""
@@ -443,6 +489,20 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     last_sample_t = time.time()
     progress_every = expt.get('progress_every_steps',
                               defaults.get('progress_every_steps', 20))
+
+    # Stuck-escape (opt-in). On a CONVERGENCE detection, rotate about the
+    # centroid instead of terminating, up to escape_cap times per spatial area
+    # (radius escape_R ~ cluster size). Truly-converged runs hit the cap and
+    # then terminate as before.
+    enable_escape = expt.get('enable_escape',
+                             defaults.get('enable_escape', False))
+    escape_angle = float(expt.get('escape_angle',
+                                  defaults.get('escape_angle', math.pi / 2)))
+    escape_cap = int(expt.get('escape_cap', defaults.get('escape_cap', 2)))
+    escape_R = float(expt.get('escape_area_factor',
+                              defaults.get('escape_area_factor', 2.0))) * d
+    escape_areas = []  # list of [cx, cy, count]
+
     while True:
         rclpy.spin_once(orch, timeout_sec=0.05)
         # Sample at the same interval as the plotter so step_count tracks NPZ rows
@@ -475,6 +535,30 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         terminate, reason = check_termination(
             orch, expt, defaults, step_count, t_started)
         if terminate:
+            if enable_escape and _is_convergence(reason):
+                lx, ly = orch._leader_xy if orch._leader_xy else (0.0, 0.0)
+                area = next(
+                    (a for a in escape_areas
+                     if math.hypot(lx - a[0], ly - a[1]) <= escape_R), None)
+                if area is None:
+                    area = [lx, ly, 0]
+                    escape_areas.append(area)
+                if area[2] < escape_cap:
+                    area[2] += 1
+                    print(f'[{eid}] convergence ({reason}); escape rotate '
+                          f'#{area[2]}/{escape_cap} at ({lx:.1f},{ly:.1f}), '
+                          f'step={step_count}')
+                    do_escape(orch, escape_angle)
+                    # Re-arm convergence detectors after the maneuver.
+                    orch._leader_history.clear()
+                    orch._z_c_history.clear()
+                    orch._oob_streak = 0
+                    last_sample_t = time.time()
+                    continue
+                print(f'[{eid}] convergence ({reason}); escape cap reached '
+                      f'at ({lx:.1f},{ly:.1f}) -> terminating '
+                      f'(step={step_count})')
+                break
             print(f'[{eid}] terminating: {reason} (step={step_count})')
             break
 
