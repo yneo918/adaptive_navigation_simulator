@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple, List
 
 import numpy as np
+from scipy.spatial import cKDTree
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, PointField
@@ -221,6 +222,17 @@ class CsvSensorFieldPublisher(Node):
         self.frame_id = frame_id
         self.points = base_points
         self.values = base_values
+        # Spatial index over the published samples for O(log N) nearest-neighbour
+        # IDW lookups, replacing the O(N) brute-force scan in
+        # _interpolate_from_samples. Built on exactly self.points (the array the
+        # service passes), so the selected k-NN -- and thus the IDW value -- match
+        # the brute-force path. Used only via the identity check on _lookup_points.
+        self._lookup_points = self.points
+        self._lookup_tree = (
+            cKDTree(np.ascontiguousarray(
+                self.points[:, :min(2, self.points.shape[1])]))
+            if self.points.size > 0 else None
+        )
         self.fill_points = fill_points
         self.fill_values = fill_values
         self.grid_points_added = int(self.fill_points.shape[0])
@@ -809,38 +821,62 @@ class CsvSensorFieldPublisher(Node):
                 )
             return main_value, np.array([], dtype=int), np.array([], dtype=np.float64), 0.0, tail_values
 
-        distances = np.linalg.norm(dataset_slice - query_slice, axis=1)
-        if distances.size == 0:
-            raise ValueError('No sample distances available for interpolation.')
+        tree = getattr(self, '_lookup_tree', None)
+        if tree is not None and sample_points is getattr(self, '_lookup_points', None):
+            # Fast path: O(log N) k-NN via the prebuilt KDTree. Selects the same
+            # global k-nearest neighbours as the brute-force branch below (the
+            # original radius logic always reduces to the global k-NN), so the
+            # IDW value is identical apart from tie ordering at the k-th
+            # neighbour -- negligible for continuous queries.
+            k = min(self.fill_neighbor_count, sample_points.shape[0])
+            nn_dist, nn_idx = tree.query(query_slice, k=k)
+            neighbor_indices = np.atleast_1d(nn_idx).astype(int)
+            neighbor_distances = np.atleast_1d(nn_dist).astype(np.float64)
+            if neighbor_distances[0] <= 1e-6:
+                first_index = int(neighbor_indices[0])
+                tail_values = None
+                if self.dimension > 2:
+                    tail_values = sample_points[first_index, 2:].astype(np.float64)
+                return (
+                    float(sample_values[first_index]),
+                    np.array([first_index]),
+                    np.array([1.0], dtype=np.float64),
+                    0.0,
+                    tail_values,
+                )
+        else:
+            distances = np.linalg.norm(dataset_slice - query_slice, axis=1)
+            if distances.size == 0:
+                raise ValueError('No sample distances available for interpolation.')
 
-        zero_mask = distances <= 1e-6
-        if np.any(zero_mask):
-            first_index = int(np.where(zero_mask)[0][0])
-            tail_values = None
-            if self.dimension > 2:
-                tail_values = sample_points[first_index, 2:].astype(np.float64)
-            return (
-                float(sample_values[first_index]),
-                np.array([first_index]),
-                np.array([1.0], dtype=np.float64),
-                0.0,
-                tail_values,
-            )
+            zero_mask = distances <= 1e-6
+            if np.any(zero_mask):
+                first_index = int(np.where(zero_mask)[0][0])
+                tail_values = None
+                if self.dimension > 2:
+                    tail_values = sample_points[first_index, 2:].astype(np.float64)
+                return (
+                    float(sample_values[first_index]),
+                    np.array([first_index]),
+                    np.array([1.0], dtype=np.float64),
+                    0.0,
+                    tail_values,
+                )
 
-        candidate_indices = np.arange(distances.size)
-        if radius > 0.0:
-            within_radius = np.where(distances <= radius)[0]
-            if within_radius.size >= self.fill_neighbor_count:
-                candidate_indices = within_radius
+            candidate_indices = np.arange(distances.size)
+            if radius > 0.0:
+                within_radius = np.where(distances <= radius)[0]
+                if within_radius.size >= self.fill_neighbor_count:
+                    candidate_indices = within_radius
 
-        candidate_distances = distances[candidate_indices]
-        k = min(self.fill_neighbor_count, candidate_indices.size)
-        if k == 0:
-            raise ValueError('Not enough neighbours available for interpolation.')
+            candidate_distances = distances[candidate_indices]
+            k = min(self.fill_neighbor_count, candidate_indices.size)
+            if k == 0:
+                raise ValueError('Not enough neighbours available for interpolation.')
 
-        selected = np.argpartition(candidate_distances, k - 1)[:k]
-        neighbor_indices = candidate_indices[selected]
-        neighbor_distances = distances[neighbor_indices]
+            selected = np.argpartition(candidate_distances, k - 1)[:k]
+            neighbor_indices = candidate_indices[selected]
+            neighbor_distances = distances[neighbor_indices]
 
         weights = 1.0 / np.power(np.maximum(neighbor_distances, 1e-6), self.fill_weight_power)
         weight_sum = float(np.sum(weights))
