@@ -49,6 +49,10 @@ class ANNode(Node):
                 ('time_scale', 1.0),
                 ('random_walk_period_steps', 50),
                 ('random_walk_seed', 0),
+                # Cluster translation speed [sim units/s]. Default keeps the
+                # legacy stack behaviour (0.1 = 2 m/s real); the pure_sim
+                # campaigns use 0.3 -- set via launch for validation runs.
+                ('max_vel_cluster', MAX_VEL_CLUSTER),
             ]
         )
         params = self._parameters
@@ -56,6 +60,8 @@ class ANNode(Node):
         self.prefix = ''
         self.sensor_name = self.get_parameter('sensor_msg_name').value
         self.time_scale = float(self.get_parameter('time_scale').value)
+        self.max_vel_cluster = float(
+            self.get_parameter('max_vel_cluster').value)
 
         # Validate time_scale range
         if not (MIN_TIME_SCALE <= self.time_scale <= MAX_TIME_SCALE):
@@ -165,6 +171,8 @@ class ANNode(Node):
         from rcl_interfaces.msg import SetParametersResult
         need_reseed = False
         for p in params:
+            if p.name == 'max_vel_cluster':
+                self.max_vel_cluster = float(p.value)
             if p.name in ('random_walk_period_steps', 'random_walk_seed'):
                 need_reseed = True
         if need_reseed:
@@ -425,8 +433,8 @@ class ANNode(Node):
         # REP103: X+ forward, Y+ left, bearing=0 means moving in X+ direction
         cmd_vel = Twist()
         bearing_cluster = bearing - math.atan2(x_unit[1], x_unit[0])
-        cmd_vel.linear.x = math.cos(bearing_cluster) * MAX_VEL_CLUSTER
-        cmd_vel.linear.y = math.sin(bearing_cluster) * MAX_VEL_CLUSTER
+        cmd_vel.linear.x = math.cos(bearing_cluster) * self.max_vel_cluster
+        cmd_vel.linear.y = math.sin(bearing_cluster) * self.max_vel_cluster
         return cmd_vel
 
     def _compute_velocity_5_robot_mode(self):
@@ -492,11 +500,12 @@ class ANNode(Node):
         cmd_vel = Twist()
         cmd_vel.angular.z = self.clip(vel_angular, abs_max=MAX_VEL_ROT_CLUSTER)
 
-        # Normalize linear velocity to MAX_VEL_CLUSTER
+        # Normalize linear velocity to max_vel_cluster
         vel_magnitude = 5*abs(vel_x) + abs(vel_y)
         if vel_magnitude > 0:
-            cmd_vel.linear.x = MAX_VEL_CLUSTER * vel_x * 5 / vel_magnitude
-            cmd_vel.linear.y = MAX_VEL_CLUSTER * vel_y / vel_magnitude
+            cmd_vel.linear.x = (self.max_vel_cluster * vel_x * 5
+                                / vel_magnitude)
+            cmd_vel.linear.y = self.max_vel_cluster * vel_y / vel_magnitude
         else:
             cmd_vel.linear.x = 0.0
             cmd_vel.linear.y = 0.0

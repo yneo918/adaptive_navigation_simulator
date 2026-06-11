@@ -24,8 +24,9 @@
 # 600 = 12 km, 1200 = 24 km.
 #
 # Usage (see src/auto_runner/README.md):
-#   Terminal A:
-#     ros2 launch auto_runner disaster_AN_headless.launch.py time_scale:=10.0
+#   Terminal A (max_vel_cluster MUST be 0.3 to match the pure_sim campaigns):
+#     ros2 launch auto_runner disaster_AN_headless.launch.py \
+#         time_scale:=20.0 max_vel_cluster:=0.3
 #   Terminal B:
 #     ros2 run auto_runner batch_orchestrator \
 #       --config <install_or_src>/auto_runner/config/experiments_ros_validation.yaml \
@@ -37,18 +38,18 @@ defaults:
   max_steps: 60000
   time_limit_s: 21600
 
-  # pure_sim-compatible termination (rev 3): same SEMANTIC as pure_sim's
-  # stable_motion parked detector (span over 200 steps; also the SER
-  # trigger), with the threshold tuned to this stack's speeds: the
-  # differential-drive cluster cruises at span(200) = 3.9-6.6 (measured on
-  # rev-1 trajectories; pure_sim cruises faster, hence its 5.0), and true
-  # parking gives span << 1. eps=2.0 sits between with ~2x margin both
-  # ways. arming_delay_steps disarms the detector during startup and
-  # post-escape re-orientation crawls (measured span down to 0.65).
-  # net_disp / z_range have no pure_sim counterpart and are disabled;
-  # long-period limit cycles are capped by max_steps.
+  # pure_sim-identical termination (rev 4). With the cluster speed now
+  # matched to pure_sim (Terminal A: max_vel_cluster:=0.3, i.e. 6 m/s
+  # real -- the value all pure_sim campaigns used), the diff-drive cruise
+  # span(200) lands at ~13-20, so pure_sim's own threshold (span over
+  # 200 steps < 5.0; also the SER trigger) carries the same meaning here
+  # verbatim. arming_delay_steps stays as a diff-drive-specific guard:
+  # startup and post-escape re-orientation crawls (span << cruise) would
+  # otherwise false-trigger the parked detector. net_disp / z_range have
+  # no pure_sim counterpart and are disabled; long-period limit cycles
+  # are capped by max_steps.
   plateau_window_steps: 200
-  plateau_eps: 2.0
+  plateau_eps: 5.0
   arming_delay_steps: 400
   net_disp_eps: 0.0
   z_range_eps: 0.0

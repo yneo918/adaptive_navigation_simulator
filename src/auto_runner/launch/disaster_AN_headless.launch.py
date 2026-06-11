@@ -13,6 +13,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -33,6 +34,12 @@ def generate_launch_description():
             'time_scale',
             default_value='1.0',
             description='Simulation time scale'
+        ),
+        DeclareLaunchArgument(
+            'max_vel_cluster',
+            default_value='0.1',
+            description='Cluster translation speed [sim units/s]; '
+                        '0.3 matches the pure_sim campaigns'
         ),
 
         # Cluster controller.
@@ -58,7 +65,10 @@ def generate_launch_description():
             executable='adaptive_nav',
             name='cluster_feedback',
             parameters=[cluster_file,
-                        {'use_sim_time': True, 'time_scale': 1.0}],
+                        {'use_sim_time': True, 'time_scale': 1.0,
+                         'max_vel_cluster': ParameterValue(
+                             LaunchConfiguration('max_vel_cluster'),
+                             value_type=float)}],
             output='screen',
         ),
 
