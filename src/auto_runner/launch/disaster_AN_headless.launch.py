@@ -35,21 +35,30 @@ def generate_launch_description():
             description='Simulation time scale'
         ),
 
-        # Cluster controller
+        # Cluster controller.
+        # use_sim_time: timers follow the scaled /clock from clock_publisher
+        # (launched with the first robot), so the control loop accelerates
+        # with the simulation. time_scale stays 1.0 here on purpose: the
+        # timer period is interpreted in SIM time, so dividing it by
+        # time_scale again (as the GUI controller.launch.py does) would
+        # inflate the control rate per simulated second and change the
+        # controller's behaviour across acceleration settings.
         Node(
             package='controller',
             executable='cluster_controller',
             name='cluster_feedback',
-            parameters=[cluster_file],
+            parameters=[cluster_file,
+                        {'use_sim_time': True, 'time_scale': 1.0}],
             output='screen',
         ),
 
-        # Adaptive navigation
+        # Adaptive navigation (same clocking rationale as the controller)
         Node(
             package='adaptive_nav',
             executable='adaptive_nav',
             name='cluster_feedback',
-            parameters=[cluster_file],
+            parameters=[cluster_file,
+                        {'use_sim_time': True, 'time_scale': 1.0}],
             output='screen',
         ),
 

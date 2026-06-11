@@ -34,6 +34,7 @@ import yaml
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose2D
+from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Bool, String, Float64
 
 # RCLError is the catch-all for rcl-layer failures (e.g., publishing on a node
@@ -67,6 +68,12 @@ class Orchestrator(Node):
         self._escape_active = False
         self.create_subscription(
             Bool, '/ctrl/an_escape_active', self._on_escape_active, 10)
+        # Simulation clock (published by clock_publisher, advances at
+        # time_scale x wall). Sampling/step counting must follow it so one
+        # step is always sample_interval SIMULATED seconds regardless of the
+        # acceleration; wall time is kept only for safety caps and warmup.
+        self._sim_time_s = None
+        self.create_subscription(Clock, '/clock', self._on_clock, 10)
 
         self._leader_xy = None
         self._leader_history = collections.deque(maxlen=4000)
@@ -92,6 +99,14 @@ class Orchestrator(Node):
 
     def _on_escape_active(self, msg: Bool):
         self._escape_active = bool(msg.data)
+
+    def _on_clock(self, msg: Clock):
+        self._sim_time_s = msg.clock.sec + msg.clock.nanosec / 1e9
+
+    def now_s(self) -> float:
+        """Sim time [s] if /clock has been seen, else wall time."""
+        return self._sim_time_s if self._sim_time_s is not None \
+            else time.time()
 
     def wait_for_leader(self, timeout_s: float = 30.0) -> bool:
         deadline = time.time() + timeout_s
@@ -157,6 +172,9 @@ def spawn_plotter(plotter_dir: str, sample_interval: float,
         '--ros-args',
         '-p', f'output_dir:={plotter_dir}',
         '-p', f'trajectory_sample_interval:={sample_interval}',
+        # Sample on the scaled /clock so NPZ rows are sample_interval
+        # SIMULATED seconds apart at any time_scale.
+        '-p', 'use_sim_time:=true',
         '-p', 'visualization_mode:=contour',  # avoid blocking 3D show
         '-p', 'show_plot:=false',  # no GUI popup in batch mode
         # cesium_field.yaml uses distance_scale=0.05 (1 sim unit = 20 m real)
@@ -487,7 +505,9 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     # 6. Main loop: monitor termination
     step_count = 0
-    last_sample_t = time.time()
+    last_sample_t = orch.now_s()
+    print(f'[{eid}] sampling on '
+          f'{"sim clock" if orch._sim_time_s is not None else "WALL clock (no /clock seen)"}')
     progress_every = expt.get('progress_every_steps',
                               defaults.get('progress_every_steps', 20))
 
@@ -507,12 +527,12 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
     while True:
         rclpy.spin_once(orch, timeout_sec=0.05)
         # Sample at the same interval as the plotter so step_count tracks NPZ rows
-        if time.time() - last_sample_t >= sample_interval:
+        if orch.now_s() - last_sample_t >= sample_interval:
             orch.push_history()
             oob_thr = expt.get('oob_threshold', defaults['oob_threshold'])
             orch.push_oob_check(oob_thr)
             step_count += 1
-            last_sample_t = time.time()
+            last_sample_t = orch.now_s()
 
             # Periodic progress line so long runs are not silent
             if progress_every > 0 and step_count % progress_every == 0:
@@ -554,7 +574,7 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
                     orch._leader_history.clear()
                     orch._z_c_history.clear()
                     orch._oob_streak = 0
-                    last_sample_t = time.time()
+                    last_sample_t = orch.now_s()
                     continue
                 print(f'[{eid}] convergence ({reason}); escape cap reached '
                       f'at ({lx:.1f},{ly:.1f}) -> terminating '
