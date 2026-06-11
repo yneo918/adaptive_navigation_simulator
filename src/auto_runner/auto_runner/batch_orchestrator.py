@@ -318,6 +318,15 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
     mode_for_term = expt.get('mode', '')
     rw_mode = mode_for_term in ('RANDOM_WALK', 'random_walk')
 
+    # Arming delay: convergence checks stay disarmed for the first
+    # arming_delay_steps of the run and after each escape (the caller
+    # resets _convergence_armed_at). Differential-drive clusters crawl
+    # during startup/and post-escape re-orientation (span << cruise),
+    # which otherwise false-triggers the parked detector.
+    armed_at = getattr(orch, '_convergence_armed_at', 0)
+    if step_count < armed_at:
+        return False, ''
+
     if (not rw_mode) and (not expt.get('disable_plateau',
                                        defaults.get('disable_plateau', False))):
         win = expt.get('plateau_window_steps', defaults['plateau_window_steps'])
@@ -535,6 +544,9 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     # 6. Main loop: monitor termination
     step_count = 0
+    arming_delay = int(expt.get('arming_delay_steps',
+                                defaults.get('arming_delay_steps', 0)))
+    orch._convergence_armed_at = arming_delay
     last_sample_t = orch.now_s()
     print(f'[{eid}] sampling on '
           f'{"sim clock" if orch._sim_time_s is not None else "WALL clock (no /clock seen)"}')
@@ -604,6 +616,7 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
                     orch._leader_history.clear()
                     orch._z_c_history.clear()
                     orch._oob_streak = 0
+                    orch._convergence_armed_at = step_count + arming_delay
                     last_sample_t = orch.now_s()
                     continue
                 print(f'[{eid}] convergence ({reason}); escape cap reached '

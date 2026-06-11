@@ -37,15 +37,19 @@ defaults:
   max_steps: 60000
   time_limit_s: 21600
 
-  # pure_sim-compatible termination (rev 2): the plateau span check below is
-  # configured to be EXACTLY pure_sim's stable_motion detector (span of the
-  # last 200 steps < 5 sim units = parked), which is also the SER trigger.
-  # net_disp / z_range have no pure_sim counterpart and are disabled
-  # (eps 0.0 never fires); long-period limit cycles are capped by max_steps.
-  # pure_sim's stuck(20000)/orbital(50000) windows are likewise unmapped --
-  # they almost never fired in the campaigns.
+  # pure_sim-compatible termination (rev 3): same SEMANTIC as pure_sim's
+  # stable_motion parked detector (span over 200 steps; also the SER
+  # trigger), with the threshold tuned to this stack's speeds: the
+  # differential-drive cluster cruises at span(200) = 3.9-6.6 (measured on
+  # rev-1 trajectories; pure_sim cruises faster, hence its 5.0), and true
+  # parking gives span << 1. eps=2.0 sits between with ~2x margin both
+  # ways. arming_delay_steps disarms the detector during startup and
+  # post-escape re-orientation crawls (measured span down to 0.65).
+  # net_disp / z_range have no pure_sim counterpart and are disabled;
+  # long-period limit cycles are capped by max_steps.
   plateau_window_steps: 200
-  plateau_eps: 5.0
+  plateau_eps: 2.0
+  arming_delay_steps: 400
   net_disp_eps: 0.0
   z_range_eps: 0.0
   stable_motion_window_steps: 200
