@@ -114,6 +114,27 @@ class Orchestrator(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
         return self._leader_xy is not None
 
+    def wait_for_field(self, timeout_s: float = 180.0) -> bool:
+        """Block until every robot reports a sensor value.
+
+        The cesium field node needs tens of seconds after launch to load
+        212k samples and build its interpolators; starting a run before
+        that leaves the cluster blind (no z, no terrain for the plotter)
+        and the run terminates as a bogus immediate convergence. Sensor
+        values flowing for all five robots is the readiness signal.
+        """
+        deadline = time.time() + timeout_s
+        announced = False
+        while time.time() < deadline:
+            if all(v is not None for v in self._robot_z.values()):
+                return True
+            if not announced:
+                print('[orchestrator] waiting for sensor field '
+                      '(all robots reporting z) ...')
+                announced = True
+            rclpy.spin_once(self, timeout_sec=0.2)
+        return False
+
     def reset_history(self):
         self._leader_history.clear()
         self._z_c_history.clear()
@@ -489,6 +510,15 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     if not orch.wait_for_leader(timeout_s=15.0):
         print(f'[{eid}] ERROR: leader pose never received', file=sys.stderr)
+        stop_plotter(plotter)
+        orch._active_plotter = None
+        return False
+
+    # Field readiness gate: never start navigating before the sensor field
+    # answers for every robot (see wait_for_field docstring).
+    if not orch.wait_for_field(timeout_s=180.0):
+        print(f'[{eid}] ERROR: sensor field not ready within 180s '
+              f'(robot z: {orch._robot_z})', file=sys.stderr)
         stop_plotter(plotter)
         orch._active_plotter = None
         return False
