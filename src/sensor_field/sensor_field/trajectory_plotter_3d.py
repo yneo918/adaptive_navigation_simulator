@@ -328,10 +328,19 @@ class TrajectoryPlotter3D(Node):
         """Save terrain and trajectory data to file for later viewing."""
         if filepath is None:
             filepath = self._get_output_path('trajectory_data.npz')
+        # Terrain may legitimately be absent (field node not ready); the
+        # trajectories are still valid data, so save with empty terrain
+        # arrays rather than dropping the whole run.
+        terrain_points = (self.terrain_points
+                          if self.terrain_points is not None
+                          else np.zeros((0, 2)))
+        terrain_elevations = (self.terrain_elevations
+                              if self.terrain_elevations is not None
+                              else np.zeros(0))
         np.savez(
             filepath,
-            terrain_points=self.terrain_points,
-            terrain_elevations=self.terrain_elevations,
+            terrain_points=terrain_points,
+            terrain_elevations=terrain_elevations,
             trajectories={k: np.array(v) for k, v in self.trajectories.items()},
             robot_ids=self.robot_ids[:self.num_robots],
             elevation_scale=self.elevation_scale,
@@ -350,15 +359,18 @@ class TrajectoryPlotter3D(Node):
 
     def generate_plot(self) -> None:
         """Generate plot(s) based on visualization_mode."""
-        if not self.terrain_received:
-            print('[WARN] No terrain data received. Cannot generate plot.')
-            return
-
         if all(len(traj) == 0 for traj in self.trajectories.values()):
             print('[WARN] No trajectory data recorded. Generating terrain only.')
 
-        # Save data for later viewing
+        # Save data for later viewing. This must happen BEFORE the terrain
+        # guard: trajectories are valid data even when the terrain cloud was
+        # never received, and dropping them silently loses the whole run.
         self.save_data()
+
+        if not self.terrain_received:
+            print('[WARN] No terrain data received. Cannot generate plot '
+                  '(NPZ saved without terrain).')
+            return
 
         if self.visualization_mode == 'both':
             # Generate both 3D and contour plots
