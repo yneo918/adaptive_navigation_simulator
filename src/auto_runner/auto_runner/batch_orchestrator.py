@@ -76,7 +76,7 @@ class Orchestrator(Node):
         self.create_subscription(Clock, '/clock', self._on_clock, 10)
 
         self._leader_xy = None
-        self._leader_history = collections.deque(maxlen=4000)
+        self._leader_history = collections.deque(maxlen=50000)
         self._z_c_history = collections.deque(maxlen=4000)
         self.create_subscription(
             Pose2D, '/p1/pose2D', self._on_leader_pose, 10)
@@ -385,6 +385,43 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
                             f'in last {motion_win} steps)')
                     # else: iso-contour traversal, do NOT terminate
 
+        # pure_sim stuck/orbital detector ports. Both are stationarity
+        # detectors (they compare against ~zero net motion of a closed
+        # orbit, not against cruise speed), so the pure_sim thresholds
+        # transfer verbatim once cluster speeds match. Evaluated every 200
+        # steps: the windows are 20k/50k steps, so the added detection
+        # latency is immaterial, and scanning a 50k-point history each
+        # step would load the already-busy orchestrator loop.
+        if step_count % 200 == 0:
+            hist = orch._leader_history
+            stuck_win = int(expt.get(
+                'stuck_window_steps',
+                defaults.get('stuck_window_steps', 0)))
+            if stuck_win and len(hist) >= stuck_win:
+                recent = list(hist)[-stuck_win:]
+                net = ((recent[-1][0] - recent[0][0]) ** 2
+                       + (recent[-1][1] - recent[0][1]) ** 2) ** 0.5
+                s_eps = float(expt.get(
+                    'stuck_disp_eps',
+                    defaults.get('stuck_disp_eps', 50.0)))
+                if net < s_eps:
+                    return True, (f'stuck (net={net:.1f} < {s_eps} '
+                                  f'over {stuck_win} steps)')
+            orb_win = int(expt.get(
+                'orbital_bbox_window_steps',
+                defaults.get('orbital_bbox_window_steps', 0)))
+            if orb_win and len(hist) >= orb_win:
+                recent = list(hist)[-orb_win:]
+                xs = [pt[0] for pt in recent]
+                ys = [pt[1] for pt in recent]
+                bspan = max(max(xs) - min(xs), max(ys) - min(ys))
+                o_eps = float(expt.get(
+                    'orbital_span_eps',
+                    defaults.get('orbital_span_eps', 500.0)))
+                if bspan < o_eps:
+                    return True, (f'orbital (bbox={bspan:.1f} < {o_eps} '
+                                  f'over {orb_win} steps)')
+
     # Out-of-area: all 5 robots below sensor threshold for sustained period
     oob_win = expt.get('oob_window_steps', defaults['oob_window_steps'])
     if orch._oob_streak >= oob_win:
@@ -398,7 +435,7 @@ def check_termination(orch: Orchestrator, expt: dict, defaults: dict,
 # Termination reasons that represent a (possibly false) CONVERGENCE, as opposed
 # to hard caps (max_steps/time_limit) or leaving the data region (out-of-area).
 # Only these are eligible for the stuck-escape rotation.
-_CONVERGENCE_PREFIXES = ('plateau', 'net_disp', 'z_c stable')
+_CONVERGENCE_PREFIXES = ('plateau', 'net_disp', 'z_c stable', 'stuck', 'orbital')
 
 
 def _is_convergence(reason: str) -> bool:

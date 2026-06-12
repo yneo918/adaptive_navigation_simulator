@@ -54,6 +54,16 @@ defaults:
   arming_delay_steps: 400
   net_disp_eps: 0.0
   z_range_eps: 0.0
+  # pure_sim stuck/orbital, ported verbatim (rev 5): stationarity
+  # detectors are insensitive to the diff-drive speed/wobble (cruise sits
+  # 26x/13x above these thresholds; orbit drift far below). Both are
+  # SER-eligible, matching pure_sim's trigger set {parked, stuck,
+  # orbital}. The one DD effect is timing: the ROS orbit period is ~1.3x
+  # longer, so firing may lag by up to one period (disclosed).
+  stuck_window_steps: 20000
+  stuck_disp_eps: 50.0
+  orbital_bbox_window_steps: 50000
+  orbital_span_eps: 500.0
   stable_motion_window_steps: 200
   stable_motion_span_eps: 5.0
 
