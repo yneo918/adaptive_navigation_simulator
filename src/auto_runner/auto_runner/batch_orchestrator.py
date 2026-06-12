@@ -482,6 +482,15 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
 
     print(f'\n{"=" * 60}\n[{eid}] mode={mode} d={d}\n{"=" * 60}')
 
+    # State-independent start: halt any navigation left over from a previous
+    # run or an aborted batch (Ctrl+C does not reach the AN node), and let
+    # the stack settle before repositioning. Without this, a run that starts
+    # against a still-navigating cluster inherits an undefined initial state.
+    orch.stop_pub.publish(Bool(data=True))
+    stop_settle = time.time() + 2.0
+    while time.time() < stop_settle:
+        rclpy.spin_once(orch, timeout_sec=0.1)
+
     # Reset orchestrator state
     orch.reset_history()
 
@@ -836,7 +845,14 @@ def main(argv=None):
             time.sleep(2.0)
     finally:
         # Final safety net for any exit path (incl. KeyboardInterrupt, which
-        # bypasses the per-run `except Exception`): never leave a live plotter.
+        # bypasses the per-run `except Exception`): halt navigation so the
+        # stack is not left driving after the batch dies, and never leave a
+        # live plotter.
+        try:
+            if rclpy.ok():
+                orch.stop_pub.publish(Bool(data=True))
+        except Exception:
+            pass
         kill_plotter_group(getattr(orch, '_active_plotter', None))
         try:
             orch.destroy_node()

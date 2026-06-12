@@ -28,8 +28,8 @@
 #   Terminal A (max_vel_cluster MUST be 0.3 to match the pure_sim campaigns):
 #     ros2 launch auto_runner disaster_AN_headless.launch.py \
 #         time_scale:=20.0 max_vel_cluster:=0.3
-#   Terminal B:
-#     ros2 run auto_runner batch_orchestrator \
+#   Terminal B (PYTHONUNBUFFERED=1 so `| tee` logs stream live):
+#     PYTHONUNBUFFERED=1 ros2 run auto_runner batch_orchestrator \
 #       --config <install_or_src>/auto_runner/config/experiments_ros_validation.yaml \
 #       --output-root ~/git_repos/paper/data \
 #       --ids RV01,RV02,RV03,RV04,RV05,RV06   # Tier 1 short runs first
