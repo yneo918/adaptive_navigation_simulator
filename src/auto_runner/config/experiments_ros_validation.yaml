@@ -15,9 +15,10 @@
 #     MAX reaches the peak chain vs local trap)
 #
 # Run order: Tier 1 first (most kinematics-sensitive first). max_steps are
-# sized above the longest pure_sim twin per condition (rev 2), so runs end
-# by the parked detector or OOB like the pure_sim campaigns; truncation
-# should be rare.
+# sized at ~2x the longest pure_sim twin per condition: differential-drive
+# runs are legitimately ~1.3x longer than their twins (slower realized
+# speed), so caps deliberately do NOT mirror pure_sim -- they exist only as
+# runaway backstops and should never bind.
 #
 # Coordinates: RAW sim units (FDNPP at (667, -331.1)); theta [rad].
 # d in GUI units (1 unit = 20 m real): 100 = 2 km, 500 = 10 km,
@@ -36,7 +37,7 @@
 defaults:
   trajectory_sample_interval: 0.5
   max_steps: 60000
-  time_limit_s: 21600
+  time_limit_s: 43200
 
   # pure_sim-identical termination (rev 4). With the cluster speed now
   # matched to pure_sim (Terminal A: max_vel_cluster:=0.3, i.e. 6 m/s
@@ -76,14 +77,14 @@ experiments:
     mode: TRENCH_UP
     d: 100.0
     start: {x: -2151.9, y: -1574.8, theta: 2.3562}
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d100
   - id: RV02
     mode: TRENCH_UP
     d: 100.0
     start: {x: -2151.9, y: -1574.8, theta: 2.3562}
     enable_escape: true
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d100
 
   # RIDGE d=2 km (R_E04 t180): true crest tracking, slight SER difference.
@@ -91,14 +92,14 @@ experiments:
     mode: RIDGE_DOWN
     d: 100.0
     start: {x: -133.0, y: 268.9, theta: 3.1416}
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d100
   - id: RV04
     mode: RIDGE_DOWN
     d: 100.0
     start: {x: -133.0, y: 268.9, theta: 3.1416}
     enable_escape: true
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d100
 
   # RIDGE d=2 km (T_E07 t000): SER-never-fires tie pair (N == S expected).
@@ -106,14 +107,14 @@ experiments:
     mode: RIDGE_DOWN
     d: 100.0
     start: {x: -1095.2, y: -1468.7, theta: 0.0}
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d100
   - id: RV06
     mode: RIDGE_DOWN
     d: 100.0
     start: {x: -1095.2, y: -1468.7, theta: 0.0}
     enable_escape: true
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d100
 
   # RIDGE d=12 km (C_M02 t000): SER sweet spot.
@@ -122,14 +123,14 @@ experiments:
     mode: RIDGE_DOWN
     d: 600.0
     start: {x: -1800.0, y: 530.3, theta: 0.0}
-    max_steps: 40000
+    max_steps: 60000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d600
   - id: RV08
     mode: RIDGE_DOWN
     d: 600.0
     start: {x: -1800.0, y: 530.3, theta: 0.0}
     enable_escape: true
-    max_steps: 40000
+    max_steps: 60000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d600
 
   # RIDGE d=12 km (T_M02 t225): large SER-gain pair (s_chain 30 -> 62 km).
@@ -137,14 +138,14 @@ experiments:
     mode: RIDGE_DOWN
     d: 600.0
     start: {x: -1540.4, y: -616.4, theta: 3.9270}
-    max_steps: 40000
+    max_steps: 60000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d600
   - id: RV10
     mode: RIDGE_DOWN
     d: 600.0
     start: {x: -1540.4, y: -616.4, theta: 3.9270}
     enable_escape: true
-    max_steps: 40000
+    max_steps: 60000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d600
 
   # MAX d=10 km, SER R=d (paper condition). RV11 success exemplar
@@ -155,7 +156,7 @@ experiments:
     start: {x: -4031.4, y: 680.9, theta: 4.7124}
     enable_escape: true
     escape_area_factor: 1.0
-    max_steps: 110000
+    max_steps: 175000
     output_subdir: ROS_VALIDATION/MAX_d500
   - id: RV12
     mode: MAX
@@ -163,7 +164,7 @@ experiments:
     start: {x: -3461.9, y: -1508.2, theta: 0.7854}
     enable_escape: true
     escape_area_factor: 1.0
-    max_steps: 110000
+    max_steps: 175000
     output_subdir: ROS_VALIDATION/MAX_d500
 
   # ---- Tier 2 -------------------------------------------------------------
@@ -173,14 +174,14 @@ experiments:
     d: 500.0
     start: {x: -1840.6, y: 877.8, theta: 2.3562}
     enable_escape: true
-    max_steps: 110000
+    max_steps: 175000
     output_subdir: ROS_VALIDATION/MIN_d500
   - id: RV14
     mode: MIN
     d: 500.0
     start: {x: -1301.9, y: 1873.9, theta: 3.9270}
     enable_escape: true
-    max_steps: 110000
+    max_steps: 175000
     output_subdir: ROS_VALIDATION/MIN_d500
 
   # RIDGE d=24 km (C_M02 t270): N/S trade-off pair. Long; truncation OK.
@@ -190,14 +191,14 @@ experiments:
     mode: RIDGE_DOWN
     d: 1200.0
     start: {x: -1800.0, y: 530.3, theta: 4.7124}
-    max_steps: 60000
+    max_steps: 140000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d1200
   - id: RV16
     mode: RIDGE_DOWN
     d: 1200.0
     start: {x: -1800.0, y: 530.3, theta: 4.7124}
     enable_escape: true
-    max_steps: 60000
+    max_steps: 140000
     output_subdir: ROS_VALIDATION/RIDGE_DOWN_d1200
 
   # TRENCH valley-start d=2 km spare pair (V02 t090).
@@ -205,12 +206,12 @@ experiments:
     mode: TRENCH_UP
     d: 100.0
     start: {x: -2151.9, y: -1574.8, theta: 1.5708}
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d100
   - id: RV18
     mode: TRENCH_UP
     d: 100.0
     start: {x: -2151.9, y: -1574.8, theta: 1.5708}
     enable_escape: true
-    max_steps: 60000
+    max_steps: 90000
     output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d100
