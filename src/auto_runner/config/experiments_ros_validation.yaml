@@ -225,3 +225,50 @@ experiments:
     enable_escape: true
     max_steps: 90000
     output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d100
+
+  # ---- Tier 3: aperture/mode coverage gaps (added 2026-06-15) -------------
+  # TRENCH valley-start d=20 km (V08 t315): validates the TRENCH aperture
+  # dependence (large-d ascent) that the d=2 cells alone do not cover.
+  # pure_sim: ach N/S = 1.44 / 1.92 (clear SER gain at large aperture).
+  - id: RV19
+    mode: TRENCH_UP
+    d: 1000.0
+    start: {x: -3326.9, y: 500.2, theta: 5.4978}
+    max_steps: 90000
+    output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d1000
+  - id: RV20
+    mode: TRENCH_UP
+    d: 1000.0
+    start: {x: -3326.9, y: 500.2, theta: 5.4978}
+    enable_escape: true
+    max_steps: 90000
+    output_subdir: ROS_VALIDATION/TRENCH_VALLEY_d1000
+
+  # CROSSTRACK d=200 m, z_des=0.6 (the only mode with no RV coverage; its
+  # ROS twins are the CT_TIERA pure_sim cells). Success exemplars in both
+  # senses (I02) + a trap exemplar (I07, pure_sim reached=False). SER on,
+  # matching CT_TIERA (enable_escape, escape_area_factor 2.0).
+  - id: RV21
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -801.8, y: 401.8, theta: -3.1102}
+    enable_escape: true
+    max_steps: 90000
+    output_subdir: ROS_VALIDATION/CROSSTRACK_d10
+  - id: RV22
+    mode: CROSSTRACK_CCW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -801.8, y: 401.8, theta: -3.1102}
+    enable_escape: true
+    max_steps: 90000
+    output_subdir: ROS_VALIDATION/CROSSTRACK_d10
+  - id: RV23
+    mode: CROSSTRACK_CW
+    d: 10.0
+    z_des: 0.6
+    start: {x: -1504.3, y: 300.3, theta: -3.1416}
+    enable_escape: true
+    max_steps: 90000
+    output_subdir: ROS_VALIDATION/CROSSTRACK_d10
