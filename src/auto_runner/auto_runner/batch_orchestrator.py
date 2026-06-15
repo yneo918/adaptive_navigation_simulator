@@ -91,8 +91,49 @@ class Orchestrator(Node):
                 lambda msg, r=rid: self._on_robot_sensor(msg, r),
                 10)
 
+        # Geometric out-of-area: all robots farther than geometric_oob_radius
+        # from the nearest survey point. The z-threshold OOB alone never fires
+        # offshore when the cluster locks onto an IDW-extrapolated iso-contour
+        # (CROSSTRACK): the extrapolated z stays near z_des, so z<thr is never
+        # true even 100 km out to sea. Mirrors pure_sim's geo_out. We need each
+        # robot's position and the field point set (same sim frame); subscribe
+        # to all five poses and build a KDTree once from sensor_field/points
+        # (the same cloud the plotter uses for terrain).
+        # p1 position is set by _on_leader_pose (already subscribed above);
+        # add p2..p5 here.
+        self._robot_xy = {f'p{i}': None for i in range(1, 6)}
+        for i in range(2, 6):
+            rid = f'p{i}'
+            self.create_subscription(
+                Pose2D, f'/{rid}/pose2D',
+                lambda m, r=rid: self._on_robot_pose(m, r), 10)
+        self._field_tree = None
+        from sensor_msgs.msg import PointCloud2
+        self.create_subscription(
+            PointCloud2, 'sensor_field/points', self._on_field_cloud, 10)
+
+    def _on_robot_pose(self, msg: Pose2D, rid: str):
+        self._robot_xy[rid] = (msg.x, msg.y)
+
+    def _on_field_cloud(self, msg):
+        if self._field_tree is not None:
+            return  # build once; the cloud is static
+        try:
+            import numpy as np
+            from scipy.spatial import cKDTree
+            n = msg.width * msg.height
+            arr = np.frombuffer(bytes(msg.data), dtype=np.float32)
+            arr = arr.reshape(n, msg.point_step // 4)
+            self._field_tree = cKDTree(arr[:, :2].astype(float).copy())
+            self.get_logger().info(
+                f'[orchestrator] field KDTree built: {n} points '
+                f'(geometric OOB armed)')
+        except Exception as e:
+            self.get_logger().warn(f'field cloud parse failed: {e}')
+
     def _on_leader_pose(self, msg: Pose2D):
         self._leader_xy = (msg.x, msg.y)
+        self._robot_xy['p1'] = (msg.x, msg.y)
 
     def _on_robot_sensor(self, msg: Float64, robot_id: str):
         self._robot_z[robot_id] = float(msg.data)
@@ -152,15 +193,31 @@ class Orchestrator(Node):
         if z_vals:
             self._z_c_history.append(sum(z_vals) / len(z_vals))
 
-    def push_oob_check(self, threshold: float) -> int:
+    def push_oob_check(self, threshold: float,
+                       geo_radius: float = 0.0) -> int:
         """Update out-of-area streak counter. Returns current streak.
 
-        Out-of-area: ALL 5 robots have sensor z < threshold simultaneously.
-        Streak increments per call when condition holds; resets otherwise.
+        Out-of-area = (z_out OR geo_out), matching pure_sim:
+          z_out  : ALL 5 robots have sensor z < threshold, AND
+          geo_out: ALL 5 robots are farther than geo_radius from the nearest
+                   survey point (i.e. min over robots of nearest-distance >
+                   geo_radius). geo_radius <= 0 disables the geometric test.
+        Streak increments per call when either condition holds; resets else.
         """
         if any(z is None for z in self._robot_z.values()):
             return self._oob_streak  # not all robots reporting yet
-        if max(self._robot_z.values()) < threshold:
+        z_out = max(self._robot_z.values()) < threshold
+
+        geo_out = False
+        if (geo_radius > 0.0 and self._field_tree is not None
+                and all(v is not None for v in self._robot_xy.values())):
+            import numpy as np
+            xy = np.array([self._robot_xy[f'p{i}'] for i in range(1, 6)],
+                          dtype=float)
+            nearest = self._field_tree.query(xy, k=1)[0]
+            geo_out = float(nearest.min()) > geo_radius
+
+        if z_out or geo_out:
             self._oob_streak += 1
         else:
             self._oob_streak = 0
@@ -618,7 +675,9 @@ def run_one_experiment(orch: Orchestrator, expt: dict, defaults: dict,
         if orch.now_s() - last_sample_t >= sample_interval:
             orch.push_history()
             oob_thr = expt.get('oob_threshold', defaults['oob_threshold'])
-            orch.push_oob_check(oob_thr)
+            geo_r = float(expt.get('geometric_oob_radius',
+                                   defaults.get('geometric_oob_radius', 0.0)))
+            orch.push_oob_check(oob_thr, geo_r)
             step_count += 1
             last_sample_t = orch.now_s()
 

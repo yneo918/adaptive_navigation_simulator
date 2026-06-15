@@ -69,6 +69,11 @@ defaults:
 
   oob_threshold: 0.12
   oob_window_steps: 500
+  # Geometric OOB (mirrors pure_sim): terminate when all 5 robots are
+  # farther than this many sim units from the nearest survey point. 50 = 1 km.
+  # Needed for CROSSTRACK, which otherwise follows an IDW-extrapolated
+  # iso-contour offshore (z stays ~z_des so the z-threshold OOB never fires).
+  geometric_oob_radius: 50.0
 
   enable_escape: false        # NOSER unless overridden per experiment
   escape_angle: 1.5708
